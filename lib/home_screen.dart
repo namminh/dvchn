@@ -1,7 +1,11 @@
-import 'dart:async'; // Thêm import này
+import 'dart:async';
+import 'dart:convert'; // Thêm import này nếu bạn dùng jsonDecode cho JavaScriptChannel
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:connectivity_plus/connectivity_plus.dart'; // Thêm import này
+import 'package:connectivity_plus/connectivity_plus.dart';
+
+// Đảm bảo các tệp này tồn tại và đúng đường dẫn
 import 'js_bridge_util.dart';
 import 'menu_widgets.dart';
 
@@ -17,9 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   WebViewController? _webViewController;
   JsBridgeUtil? _jsBridgeUtil;
 
-  // Biến trạng thái cho việc tải và lỗi
-  bool _isLoadingPage =
-      true; // Đổi tên từ _isLoading để rõ ràng hơn là tải trang
+  bool _isLoadingPage = true;
   bool _isError = false;
   String _errorMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.';
 
@@ -27,41 +29,50 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoggedIn = false;
   int _currentNavIndex = 0;
 
-  // Các URL mặc định
-  // final List<String> _defaultUrls = [
-  //   'http://113.160.48.99:8791',
-  //   'http://113.160.48.99:8798'
-  // ]; // Bạn có thể giữ lại nếu cần dùng
+  final String _loginUrl =
+      'http://113.160.48.99:8791/Account/Login'; // URL trang đăng nhập của bạn
 
-  // URL trang đăng nhập
-  final String _loginUrl = 'http://113.160.48.99:8791/Account/Login';
-
-  // Connectivity
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  bool _isConnected = true; // Giả định ban đầu là có kết nối
+  bool _isConnected = true;
+
+  // Danh sách các domain được coi là bên ngoài (ví dụ: SSO)
+  final List<String> _externalDomains = [
+    'sso.dancuquocgia.gov.vn',
+    'xacthuc.dichvucong.gov.vn',
+    // Thêm các domain SSO hoặc trang thanh toán bên ngoài khác nếu có
+  ];
+
+  bool _isExternalUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return _externalDomains.contains(uri.host);
+    } catch (_) {
+      return false; // Nếu URL không hợp lệ, coi như không phải external
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _currentUrl = MenuConfig.homeUrl; // Gán _currentUrl ban đầu
+    _currentUrl = MenuConfig.homeUrl;
     _urlController.text = _currentUrl;
 
-    // Kiểm tra kết nối mạng ban đầu và lắng nghe thay đổi
     _checkInitialConnectivity();
     _connectivitySubscription =
         Connectivity().onConnectivityChanged.listen(_updateConnectionStatus);
 
-    _loadUrl(_currentUrl); // Tải URL ban đầu
+    _loadUrl(_currentUrl);
   }
 
   Future<void> _checkInitialConnectivity() async {
-    List<ConnectivityResult> connectivityResult =
-        await Connectivity().checkConnectivity();
+    var connectivityResult = await Connectivity().checkConnectivity();
     _updateConnectionStatus(connectivityResult, isInitialCheck: true);
   }
 
   void _updateConnectionStatus(List<ConnectivityResult> result,
       {bool isInitialCheck = false}) {
+    if (!mounted) return;
+
     bool currentlyConnected = !result.contains(ConnectivityResult.none);
 
     if (_isConnected != currentlyConnected) {
@@ -73,19 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
           _errorMessage =
               "Mất kết nối mạng. Vui lòng kiểm tra lại đường truyền và thử lại.";
         } else {
-          // Nếu có kết nối trở lại và đang ở trạng thái lỗi, thử tải lại
-          if (_isError) {
-            // Không tự động tải lại ở đây nữa, để người dùng nhấn "Thử lại"
-            // _retryLoading();
-            // Chỉ cần cập nhật lại thông báo nếu trước đó là lỗi mạng
-            setState(() {
-              _isError = false; // Reset lỗi để cho phép thử lại
-            });
+          if (_isError && _errorMessage.contains("Mất kết nối mạng")) {
+            // Nếu có mạng trở lại và lỗi trước đó là do mất mạng
+            _isError = false; // Reset lỗi để cho phép người dùng thử lại
+            // Cân nhắc: có thể tự động gọi _retryLoading() ở đây nếu muốn
           }
         }
       });
     } else if (isInitialCheck && !_isConnected) {
-      // Trường hợp ban đầu vào app đã không có mạng
       setState(() {
         _isError = true;
         _isLoadingPage = false;
@@ -98,34 +104,50 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _urlController.dispose();
-    _connectivitySubscription?.cancel(); // Hủy subscription
+    _connectivitySubscription?.cancel();
     super.dispose();
+  }
+
+  void _setupJavaScriptChannels() {
+    // CHƯA THỰC HIỆN: Đây là nơi bạn sẽ thêm các JavaScriptChannel nếu sửa JsBridgeUtil
+    // Ví dụ:
+    // _webViewController?.addJavaScriptChannel(
+    //   'loginResultHandler',
+    //   onMessageReceived: (JavaScriptMessage message) {
+    //     print('loginResultHandler received: ${message.message}');
+    //     try {
+    //       final data = jsonDecode(message.message);
+    //       // Xử lý data...
+    //     } catch (e) {
+    //       print('Error decoding message from loginResultHandler: $e');
+    //     }
+    //   },
+    // );
+    // ... thêm các channels khác ...
   }
 
   void _loadUrl(String url, {bool isRetry = false}) {
     if (url.isEmpty) return;
 
-    // Thêm http:// nếu URL không bắt đầu bằng http:// hoặc https://
     String effectiveUrl = url;
     if (!effectiveUrl.startsWith('http://') &&
         !effectiveUrl.startsWith('https://')) {
       effectiveUrl = 'http://$effectiveUrl';
     }
 
-    // Chỉ cập nhật _currentUrl nếu không phải là retry cùng URL,
-    // hoặc nếu là retry nhưng _currentUrl trống (trường hợp lỗi ban đầu)
-    if (!isRetry || _currentUrl.isEmpty) {
+    if (!isRetry || _currentUrl.isEmpty || _currentUrl != effectiveUrl) {
       _currentUrl = effectiveUrl;
     }
     _urlController.text = _currentUrl;
 
+    if (!mounted) return;
     setState(() {
       _isLoadingPage = true;
-      _isError = false; // Reset trạng thái lỗi mỗi khi tải URL mới
+      _isError = false;
     });
 
-    // Nếu chưa có kết nối mạng, hiển thị lỗi ngay
     if (!_isConnected) {
+      if (!mounted) return;
       setState(() {
         _isLoadingPage = false;
         _isError = true;
@@ -135,159 +157,311 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Khởi tạo WebViewController mới mỗi lần load URL
-    // Điều này đảm bảo trạng thái WebView được làm mới hoàn toàn
-    _webViewController = WebViewController()
+    final tempController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
-            setState(() {
-              _isLoadingPage = true;
-              _isError = false; // Quan trọng: reset lỗi khi trang bắt đầu tải
-            });
-          },
-          onPageFinished: (String url) async {
-            // Thiết lập JavaScript Bridge
-            if (_webViewController != null) {
-              _jsBridgeUtil = JsBridgeUtil(_webViewController!);
-              await _jsBridgeUtil!.setupJavaScriptHandlers();
+          onPageStarted: (String navUrl) {
+            print('WebView: Page started loading: $navUrl');
+            if (mounted) {
+              setState(() {
+                _isLoadingPage = true;
+                _isError =
+                    false; // Quan trọng: Reset lỗi khi bắt đầu tải trang mới
+              });
             }
+          },
+          onPageFinished: (String finishedUrl) async {
+            print('WebView: Page finished loading: $finishedUrl');
+            if (!mounted) return;
 
-            // Kiểm tra trạng thái đăng nhập
-            final isLoggedIn = await _jsBridgeUtil?.checkLoginStatus() ?? false;
+            bool isExternal = _isExternalUrl(finishedUrl);
 
-            setState(() {
-              _isLoadingPage = false;
-              // _isError giữ nguyên, không thay đổi ở đây trừ khi có lỗi thực sự
-              _isLoggedIn = isLoggedIn;
-            });
+            if (!isExternal && _webViewController != null) {
+              // Chỉ thiết lập JS bridge và kiểm tra đăng nhập cho domain của bạn
+              // Khởi tạo JsBridgeUtil với controller hiện tại (đã được gán cho _webViewController)
+              _jsBridgeUtil = JsBridgeUtil(_webViewController!);
+              await _jsBridgeUtil!
+                  .setupJavaScriptHandlers(); // JS này vẫn cần sửa cho webview_flutter
 
-            // Cập nhật index của bottom navigation bar dựa trên URL hiện tại
-            _updateCurrentNavIndex(url);
+              final isLoggedIn = await _jsBridgeUtil!
+                  .checkLoginStatus(); // Hàm JS này có thể lỗi trên trang ngoài
+              if (mounted) {
+                setState(() {
+                  _isLoadingPage = false;
+                  _isLoggedIn = isLoggedIn;
+                });
+              }
+            } else {
+              // Nếu là domain ngoài (ví dụ: SSO) hoặc controller null, chỉ dừng loading
+              setState(() {
+                _isLoadingPage = false;
+              });
+            }
+            _updateCurrentNavIndex(finishedUrl);
           },
           onWebResourceError: (WebResourceError error) {
+            print(
+                'WebView: WebResourceError: ${error.description}, URL: ${error.url}, ErrorCode: ${error.errorCode}, Type: ${error.errorType}, isForMainFrame: ${error.isForMainFrame}');
+            if (!mounted) return;
+
+            // Nếu lỗi không phải cho frame chính và đang ở trang ngoài, có thể bỏ qua việc hiển thị lỗi toàn màn hình
+            if (error.isForMainFrame == false &&
+                error.url != null &&
+                _isExternalUrl(error.url!)) {
+              print(
+                  'Ignoring non-main frame error on external domain: ${error.url}');
+              // Có thể hiển thị SnackBar thay vì lỗi toàn màn hình
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('đang tải')),
+              );
+              // Không set _isLoadingPage = false hoặc _isError = true ở đây nếu không muốn thay đổi UI chính
+              return; // Thoát sớm để không xử lý như lỗi nghiêm trọng
+            }
+
             setState(() {
               _isLoadingPage = false;
-              _isError = true;
-              // Phân biệt lỗi do mất kết nối mạng hay lỗi khác từ web
-              if (error.errorCode == -2 /* NET::ERR_INTERNET_DISCONNECTED */ ||
-                      error.errorCode == -6 /* NET::ERR_NAME_NOT_RESOLVED */ ||
-                      error.description
-                          .toLowerCase()
-                          .contains('net::err_internet_disconnected') ||
-                      error.description
-                          .toLowerCase()
-                          .contains('net::err_name_not_resolved') ||
-                      error.description.toLowerCase().contains('no internet') ||
-                      error.errorType ==
-                          WebResourceErrorType
-                              .hostLookup || // Thêm các type lỗi mạng
-                      error.errorType == WebResourceErrorType.connect ||
-                      !_isConnected // Kiểm tra lại biến _isConnected
-                  ) {
+              _isError = true; // Mặc định là có lỗi
+
+              if (!_isConnected) {
+                _errorMessage =
+                    "Mất kết nối mạng. Vui lòng kiểm tra lại đường truyền.";
+              } else if (error.isForMainFrame == true &&
+                  (error.url == _currentUrl ||
+                      _isExternalUrl(error.url ?? _currentUrl))) {
+                // Lỗi tải trang chính (SSO hoặc trang hiện tại)
+                _errorMessage = "Không thể tải trang: ${error.description}";
+              } else if (error.errorCode == -2 ||
+                  error.errorCode == -6 ||
+                  error.description
+                      .toLowerCase()
+                      .contains('net::err_internet_disconnected') ||
+                  error.description
+                      .toLowerCase()
+                      .contains('net::err_name_not_resolved') ||
+                  error.description.toLowerCase().contains('no internet') ||
+                  error.errorType == WebResourceErrorType.hostLookup ||
+                  error.errorType == WebResourceErrorType.connect ||
+                  error.errorType == WebResourceErrorType.timeout) {
                 _errorMessage =
                     "Không thể kết nối tới máy chủ hoặc không có kết nối mạng. Vui lòng thử lại.";
               } else {
                 _errorMessage =
-                    "Không thể tải trang. Lỗi: ${error.description}";
+                    "Đã xảy ra lỗi khi tải trang: ${error.description}";
               }
             });
           },
           onNavigationRequest: (NavigationRequest request) {
-            // Giữ nguyên logic của bạn
+            print('WebView: Navigation request to: ${request.url}');
+            // Ví dụ: Xử lý các link đặc biệt (tel:, mailto:, custom schemes)
+            // if (request.url.startsWith('tel:')) {
+            //   // launchUrl(Uri.parse(request.url));
+            //   return NavigationDecision.prevent;
+            // }
             return NavigationDecision.navigate;
           },
+          onUrlChange: (UrlChange change) {
+            if (change.url != null) {
+              print('WebView: URL changed to: ${change.url}');
+              if (mounted) {
+                // Cập nhật _currentUrl nếu URL thực sự thay đổi do điều hướng trong WebView
+                // Điều này quan trọng cho nút "Thử lại" và logic khác dựa trên URL hiện tại
+                // Tuy nhiên, cẩn thận để không gây vòng lặp setState nếu onUrlChange và onPageFinished/Started cùng kích hoạt
+                if (_currentUrl != change.url) {
+                  // setState(() {
+                  //   _currentUrl = change.url!;
+                  //   _urlController.text = _currentUrl;
+                  // });
+                }
+              }
+            }
+          },
         ),
-      )
-      ..loadRequest(
-          Uri.parse(_currentUrl)); // Luôn dùng _currentUrl đã được cập nhật
+      );
 
-    // Cần setState sau khi gán _webViewController để UI rebuild với WebView mới (nếu có)
-    // Tuy nhiên, các setState trong onPageStarted/Finished/Error đã đủ để cập nhật UI
-    // setState(() {}); // Có thể không cần thiết ở đây nữa
+    // Gán controller và thiết lập JavaScript Channels (nếu có)
+    _webViewController = tempController;
+    _setupJavaScriptChannels(); // Gọi hàm thiết lập channels (hiện đang trống)
+
+    // Tải request
+    _webViewController!.loadRequest(Uri.parse(_currentUrl));
+
+    if (mounted) {
+      setState(() {}); // Rebuild để WebViewWidget sử dụng controller mới
+    }
   }
 
   void _retryLoading() {
-    // Nếu vẫn không có mạng, không thử lại, chỉ cập nhật thông báo nếu cần
     if (!_isConnected) {
-      setState(() {
-        _isLoadingPage = false; // Đảm bảo không hiển thị loading
-        _isError = true;
-        _errorMessage = "Vẫn mất kết nối mạng. Vui lòng kiểm tra đường truyền.";
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingPage = false;
+          _isError = true;
+          _errorMessage =
+              "Vẫn mất kết nối mạng. Vui lòng kiểm tra đường truyền.";
+        });
+      }
       return;
     }
-    // Nếu có mạng, tiến hành tải lại URL hiện tại
     if (_currentUrl.isNotEmpty) {
       _loadUrl(_currentUrl, isRetry: true);
     } else {
-      // Trường hợp không có _currentUrl (ví dụ: lỗi ngay khi mở app)
-      // thì thử tải lại URL mặc định ban đầu (MenuConfig.homeUrl)
       _loadUrl(MenuConfig.homeUrl, isRetry: true);
     }
   }
 
   void _updateCurrentNavIndex(String url) {
+    if (!mounted) return;
     for (int i = 0; i < MenuConfig.bottomNavItems.length; i++) {
-      if (url.contains(MenuConfig.bottomNavItems[i].url)) {
-        setState(() {
-          _currentNavIndex = i;
-        });
+      // Kiểm tra xem URL có chứa phần base của item nav không
+      // Ví dụ: nếu item.url là "http://domain.com/path" và url là "http://domain.com/path/subpath"
+      // thì nên coi là khớp.
+      // Hoặc nếu item.url là "/path" và url là "http://domain.com/path", cũng nên khớp.
+      Uri itemUri;
+      try {
+        itemUri = Uri.parse(MenuConfig.bottomNavItems[i].url);
+      } catch (_) {
+        continue;
+      }
+
+      Uri currentLoadedUri;
+      try {
+        currentLoadedUri = Uri.parse(url);
+      } catch (_) {
+        continue;
+      }
+
+      // So sánh host và path (hoặc chỉ path nếu itemUri không có host)
+      bool hostMatch =
+          (itemUri.hasAuthority && itemUri.host == currentLoadedUri.host) ||
+              !itemUri.hasAuthority;
+      bool pathMatch = currentLoadedUri.path.startsWith(itemUri.path);
+
+      if (hostMatch && pathMatch) {
+        if (_currentNavIndex != i) {
+          setState(() {
+            _currentNavIndex = i;
+          });
+        }
         return;
       }
     }
+    // Nếu không khớp, có thể không làm gì hoặc đặt về một trạng thái default (ví dụ -1)
+    // if (_currentNavIndex != -1) { // Ví dụ: reset nếu không có item nào khớp
+    //   setState(() {
+    //     _currentNavIndex = -1; // Hoặc một index mặc định nào đó
+    //   });
+    // }
   }
 
   void _onBottomNavTap(int index) {
     if (index != _currentNavIndex) {
-      // Reset lỗi khi chuyển tab, vì sẽ load URL mới
-      setState(() {
-        _isError = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isError = false;
+          // _currentNavIndex = index; // Cập nhật ngay lập tức hoặc chờ onPageFinished
+        });
+      }
       _loadUrl(MenuConfig.bottomNavItems[index].url);
-      // _currentNavIndex sẽ được cập nhật trong onPageFinished -> _updateCurrentNavIndex
-      // Tuy nhiên, để UI phản hồi ngay lập tức, có thể cập nhật ở đây:
-      // setState(() {
-      //  _currentNavIndex = index;
-      // });
     }
   }
 
   void _onNavigate(String url) {
-    // Reset lỗi khi điều hướng, vì sẽ load URL mới
-    setState(() {
-      _isError = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isError = false;
+      });
+    }
     _loadUrl(url);
   }
 
   void _onLoginRequired() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Yêu cầu đăng nhập'),
-        content: const Text('Bạn cần đăng nhập để sử dụng tính năng này.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('Hủy'),
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Reset lỗi trước khi tải trang đăng nhập
-              setState(() {
-                _isError = false;
-              });
-              _loadUrl(_loginUrl);
-            },
-            child: const Text('Đăng nhập'),
+          titlePadding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 0.0),
+          contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 24.0),
+          actionsPadding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+          icon: Icon(
+            Icons.login_rounded,
+            color: Theme.of(dialogContext).colorScheme.primary,
+            size: 48.0,
           ),
-        ],
-      ),
+          title: Center(
+            child: Text(
+              'Yêu Cầu Đăng Nhập',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20.0,
+                color: Theme.of(dialogContext).colorScheme.onSurface,
+              ),
+            ),
+          ),
+          content: Text(
+            'Bạn cần đăng nhập để tiếp tục sử dụng tính năng này. Vui lòng đăng nhập.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16.0,
+              color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: <Widget>[
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0, vertical: 12.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: Text(
+                'Hủy Bỏ',
+                style: TextStyle(
+                  fontSize: 16.0,
+                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.person_pin_circle_outlined, size: 20),
+              label: const Text(
+                'Đăng Nhập',
+                style: TextStyle(fontSize: 16.0),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.primary,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0, vertical: 12.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                elevation: 2.0,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                if (mounted) {
+                  setState(() {
+                    _isError = false;
+                  });
+                }
+                _loadUrl(_loginUrl);
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -300,7 +474,9 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _retryLoading, // Sử dụng _retryLoading cho nút refresh
+            onPressed: (_isLoadingPage || (!_isConnected && _isError))
+                ? null
+                : _retryLoading,
           ),
         ],
       ),
@@ -310,45 +486,40 @@ class _HomeScreenState extends State<HomeScreen> {
         onLoginRequired: _onLoginRequired,
       ),
       body: Column(
-        // Giữ nguyên cấu trúc Column của bạn
         children: [
-          // Padding( ... TextField ... ) // Giữ nguyên nếu bạn muốn kích hoạt lại thanh URL
           Expanded(
             child: Stack(
+              alignment: Alignment.center,
               children: [
-                // WebViewWidget
-                if (_webViewController != null &&
-                    !_isError) // Chỉ hiển thị WebView nếu controller tồn tại và không có lỗi
+                if (_webViewController != null)
                   WebViewWidget(controller: _webViewController!),
-
-                // Màn hình chờ tải trang
                 if (_isLoadingPage)
                   const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         CircularProgressIndicator(),
-                        SizedBox(height: 10),
-                        Text("Đang tải trang..."),
+                        SizedBox(height: 20),
+                        Text("Đang tải trang...",
+                            style: TextStyle(fontSize: 16)),
                       ],
                     ),
                   ),
-
-                // Màn hình lỗi (bao gồm cả mất kết nối)
-                // Hiển thị khi có lỗi (_isError = true) VÀ không đang tải (_isLoadingPage = false)
                 if (_isError && !_isLoadingPage)
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.all(20),
-                      margin: const EdgeInsets.symmetric(horizontal: 30),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 30),
+                      margin: const EdgeInsets.symmetric(horizontal: 40),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.1),
-                            spreadRadius: 2,
-                            blurRadius: 5,
+                            spreadRadius: 1,
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
                           )
                         ],
                       ),
@@ -356,47 +527,57 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
                           Icon(
-                            _isConnected
-                                ? Icons.error_outline
-                                : Icons.signal_wifi_off_outlined,
-                            color: Colors.red,
-                            size: 50,
+                            !_isConnected
+                                ? Icons.signal_wifi_off_rounded
+                                : Icons.error_outline_rounded,
+                            color: Colors.redAccent,
+                            size: 60,
                           ),
-                          const SizedBox(height: 15),
+                          const SizedBox(height: 20),
                           Text(
                             _errorMessage,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 16),
+                            style: TextStyle(
+                                fontSize: 17,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.color),
                           ),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            onPressed: _retryLoading,
-                            child: const Text('Thử lại'),
+                          const SizedBox(height: 25),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.refresh_rounded),
+                            onPressed: _isConnected ||
+                                    _errorMessage
+                                        .contains("Không thể tải trang")
+                                ? _retryLoading
+                                : null,
+                            label: const Text('Thử lại'),
+                            style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 12),
+                                textStyle: const TextStyle(fontSize: 16)),
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                // Placeholder ban đầu nếu chưa có gì để hiển thị và không lỗi/loading
-                // (Ví dụ: lần đầu mở app và chưa load gì, hoặc khi webview bị ẩn do lỗi nhưng chưa có thông báo lỗi cụ thể)
                 if (_webViewController == null && !_isLoadingPage && !_isError)
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.web_outlined,
+                        const Icon(Icons.web_stories_outlined,
                             size: 80, color: Colors.grey),
                         const SizedBox(height: 16),
                         const Text(
-                          'Không có nội dung để hiển thị.',
-                          style: TextStyle(fontSize: 16),
+                          'Sẵn sàng duyệt web.',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton(
-                          onPressed: () =>
-                              _loadUrl(MenuConfig.homeUrl), // Tải lại trang chủ
-                          child: const Text('Tải trang chủ'),
+                          onPressed: () => _loadUrl(MenuConfig.homeUrl),
+                          child: const Text('Bắt đầu với trang chủ'),
                         ),
                       ],
                     ),
