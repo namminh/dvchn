@@ -130,6 +130,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Function to check for storage permissions (optional)
+  Future<bool> hasStoragePermissions() async {
+    final permission = await Permission.storage.status;
+    return permission == PermissionStatus.granted;
+  }
+
   Future<void> _requestPermissions() async {
     print("HomeScreen: Requesting initial permissions in initState...");
     if (Platform.isAndroid || Platform.isIOS) {
@@ -216,10 +222,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _downloadFile(String url, String suggestedFileName) async {
     print(
         '_downloadFile: Starting download for URL: $url, Suggested Filename: $suggestedFileName');
+
     try {
       print('_downloadFile: Requesting storage permission before download...');
-      PermissionStatus storageStatus =
-          await Permission.storage.request(); // Yêu cầu lại quyền ở đây
+
+      PermissionStatus storageStatus = await Permission.manageExternalStorage
+          .request(); // Yêu cầu lại quyền ở đây
       print(
           '_downloadFile: Storage permission status before download: $storageStatus');
 
