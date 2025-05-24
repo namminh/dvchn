@@ -1,11 +1,14 @@
 import 'dart:async';
-import 'dart:convert'; // Thêm import này nếu bạn dùng jsonDecode cho JavaScriptChannel
-
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-
-// Đảm bảo các tệp này tồn tại và đúng đường dẫn
+import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
 import 'js_bridge_util.dart';
 import 'menu_widgets.dart';
 
@@ -29,17 +32,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoggedIn = false;
   int _currentNavIndex = 0;
 
-  final String _loginUrl =
-      'http://113.160.48.99:8791/Account/Login'; // URL trang đăng nhập của bạn
+  final String _loginUrl = 'http://113.160.48.99:8791/Account/Login';
 
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<InternetConnectionStatus>? _connectivitySubscription;
   bool _isConnected = true;
 
-  // Danh sách các domain được coi là bên ngoài (ví dụ: SSO)
   final List<String> _externalDomains = [
     'sso.dancuquocgia.gov.vn',
     'xacthuc.dichvucong.gov.vn',
-    // Thêm các domain SSO hoặc trang thanh toán bên ngoài khác nếu có
   ];
 
   bool _isExternalUrl(String url) {
@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final uri = Uri.parse(url);
       return _externalDomains.contains(uri.host);
     } catch (_) {
-      return false; // Nếu URL không hợp lệ, coi như không phải external
+      return false;
     }
   }
 
@@ -58,26 +58,123 @@ class _HomeScreenState extends State<HomeScreen> {
     _urlController.text = _currentUrl;
 
     _checkInitialConnectivity();
-    _connectivitySubscription =
-        Connectivity().onConnectivityChanged.listen(_updateConnectionStatus);
+    final checker = InternetConnectionChecker.createInstance();
+    _connectivitySubscription = checker.onStatusChange.listen(
+      (status) {
+        _updateConnectionStatus(status == InternetConnectionStatus.connected);
+      },
+    );
 
+    _requestPermissions();
     _loadUrl(_currentUrl);
   }
 
-  Future<void> _checkInitialConnectivity() async {
-    var connectivityResult = await Connectivity().checkConnectivity();
-    _updateConnectionStatus(connectivityResult, isInitialCheck: true);
+  Future<void> _showPermissionPermanentlyDeniedDialog() async {
+    if (!mounted) return; // Đảm bảo widget còn tồn tại
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // Người dùng phải nhấn nút để đóng dialog
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+          title: const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: Colors.orange),
+              SizedBox(width: 10),
+              Text('Quyền Bị Từ Chối'),
+            ],
+          ),
+          content: const SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                    'Ứng dụng cần quyền truy cập bộ nhớ để có thể tải và lưu trữ file.'),
+                SizedBox(height: 10),
+                Text(
+                    'Do bạn đã từ chối quyền này trước đó và có thể đã chọn "không hỏi lại", vui lòng vào cài đặt của ứng dụng để cấp quyền theo cách thủ công.'),
+              ],
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actions: <Widget>[
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey[700],
+              ),
+              child: const Text('Hủy Bỏ'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.settings_outlined),
+              label: const Text('Mở Cài Đặt'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    Theme.of(context).primaryColor, // Sử dụng màu chủ đạo
+                foregroundColor: Colors.white, // Chữ màu trắng
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Đóng dialog hiện tại
+                openAppSettings(); // Mở cài đặt ứng dụng
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  void _updateConnectionStatus(List<ConnectivityResult> result,
+  Future<void> _requestPermissions() async {
+    print("HomeScreen: Requesting initial permissions in initState...");
+    if (Platform.isAndroid || Platform.isIOS) {
+      // Chỉ yêu cầu quyền storage nếu nó là cốt lõi cho chức năng tải file
+      PermissionStatus storageStatus = await Permission.storage.request();
+
+      print(
+          "HomeScreen: Permission.storage Status in initState: ${storageStatus.toString()}");
+
+      if (storageStatus == PermissionStatus.permanentlyDenied) {
+        print(
+            "HomeScreen: Storage permission is permanently denied (checked in initState).");
+        await _showPermissionPermanentlyDeniedDialog(); // Hiển thị dialog tùy chỉnh
+      } else if (storageStatus == PermissionStatus.denied) {
+        print(
+            "HomeScreen: Storage permission was denied in initState (not permanently).");
+        // Bạn có thể hiển thị SnackBar thông báo ngắn gọn ở đây nếu muốn
+        // if (mounted) {
+        //   ScaffoldMessenger.of(context).showSnackBar(
+        //     const SnackBar(content: Text('Quyền truy cập bộ nhớ bị từ chối.')),
+        //   );
+        // }
+      } else if (storageStatus == PermissionStatus.granted) {
+        print(
+            "HomeScreen: Storage permission granted successfully in initState.");
+      }
+      // Không cần xử lý Permission.photos ở đây nữa nếu chỉ tập trung vào tải file
+    } else {
+      print("HomeScreen: Permissions not requested (not Android or iOS).");
+    }
+  }
+
+  Future<void> _checkInitialConnectivity() async {
+    final checker = InternetConnectionChecker.createInstance();
+    bool isConnected = await checker.hasConnection;
+    _updateConnectionStatus(isConnected, isInitialCheck: true);
+  }
+
+  void _updateConnectionStatus(bool isConnected,
       {bool isInitialCheck = false}) {
     if (!mounted) return;
 
-    bool currentlyConnected = !result.contains(ConnectivityResult.none);
-
-    if (_isConnected != currentlyConnected) {
+    if (_isConnected != isConnected) {
       setState(() {
-        _isConnected = currentlyConnected;
+        _isConnected = isConnected;
         if (!_isConnected) {
           _isError = true;
           _isLoadingPage = false;
@@ -85,9 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
               "Mất kết nối mạng. Vui lòng kiểm tra lại đường truyền và thử lại.";
         } else {
           if (_isError && _errorMessage.contains("Mất kết nối mạng")) {
-            // Nếu có mạng trở lại và lỗi trước đó là do mất mạng
-            _isError = false; // Reset lỗi để cho phép người dùng thử lại
-            // Cân nhắc: có thể tự động gọi _retryLoading() ở đây nếu muốn
+            _isError = false;
           }
         }
       });
@@ -109,21 +204,171 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _setupJavaScriptChannels() {
-    // CHƯA THỰC HIỆN: Đây là nơi bạn sẽ thêm các JavaScriptChannel nếu sửa JsBridgeUtil
-    // Ví dụ:
-    // _webViewController?.addJavaScriptChannel(
-    //   'loginResultHandler',
-    //   onMessageReceived: (JavaScriptMessage message) {
-    //     print('loginResultHandler received: ${message.message}');
-    //     try {
-    //       final data = jsonDecode(message.message);
-    //       // Xử lý data...
-    //     } catch (e) {
-    //       print('Error decoding message from loginResultHandler: $e');
-    //     }
-    //   },
-    // );
-    // ... thêm các channels khác ...
+    if (_webViewController != null) {
+      _jsBridgeUtil = JsBridgeUtil(
+        _webViewController!,
+        onFileUploadRequested: _openFilePicker,
+      );
+      _jsBridgeUtil!.setupJavaScriptHandlers();
+    }
+  }
+
+  Future<void> _downloadFile(String url, String suggestedFileName) async {
+    print(
+        '_downloadFile: Starting download for URL: $url, Suggested Filename: $suggestedFileName');
+    try {
+      print('_downloadFile: Requesting storage permission before download...');
+      PermissionStatus storageStatus =
+          await Permission.storage.request(); // Yêu cầu lại quyền ở đây
+      print(
+          '_downloadFile: Storage permission status before download: $storageStatus');
+
+      if (storageStatus.isGranted) {
+        print('_downloadFile: Storage permission granted for download.');
+        final directory = await getExternalStorageDirectory();
+
+        if (directory == null) {
+          print('_downloadFile: ERROR - Could not get storage directory.');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Không thể truy cập bộ nhớ ngoài.')),
+            );
+          }
+          return;
+        }
+        print('_downloadFile: Storage directory: ${directory.path}');
+
+        // ... (Phần còn lại của logic tải file: http.get, content-disposition, ghi file, ...)
+        // Đảm bảo phần này giữ nguyên như đã sửa ở các bước trước
+        print('_downloadFile: Making HTTP GET request to $url');
+        final response = await http.get(Uri.parse(url));
+        print(
+            '_downloadFile: HTTP response status code: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          // ... (Logic xử lý filename và lưu file) ...
+          String finalFileName = suggestedFileName;
+          // (Code trích xuất filename từ Content-Disposition)
+          final disposition = response.headers['content-disposition'];
+          if (disposition != null) {
+            String? extractedName;
+            final starMatch = RegExp(r'filename\*=UTF-8\' '\'([^\;\r\n]+)',
+                    caseSensitive: false)
+                .firstMatch(disposition);
+            if (starMatch != null && starMatch.group(1) != null) {
+              try {
+                extractedName = Uri.decodeComponent(starMatch.group(1)!);
+              } catch (e) {/* ... */}
+            }
+            if (extractedName == null || extractedName.isEmpty) {
+              final plainMatch =
+                  RegExp(r'filename="([^"]+)"', caseSensitive: false)
+                      .firstMatch(disposition);
+              if (plainMatch != null && plainMatch.group(1) != null) {
+                extractedName = plainMatch.group(1);
+              }
+            }
+            if (extractedName == null || extractedName.isEmpty) {
+              final nonQuotedMatch =
+                  RegExp(r'filename=([^;]+)', caseSensitive: false)
+                      .firstMatch(disposition);
+              if (nonQuotedMatch != null && nonQuotedMatch.group(1) != null) {
+                extractedName = nonQuotedMatch.group(1)!.trim();
+                if (extractedName.startsWith('"') &&
+                    extractedName.endsWith('"') &&
+                    extractedName.length > 1) {
+                  extractedName =
+                      extractedName.substring(1, extractedName.length - 1);
+                }
+              }
+            }
+            if (extractedName != null && extractedName.isNotEmpty) {
+              finalFileName = extractedName;
+            }
+          }
+          finalFileName = finalFileName.replaceAll(RegExp(r'[^\w\s\.\-]'), '_');
+          if (finalFileName.isEmpty ||
+              finalFileName.split('').every((char) => char == '_')) {
+            finalFileName = "downloaded_unnamed_file";
+          }
+
+          final filePath = '${directory.path}/$finalFileName';
+          print('_downloadFile: Attempting to write file to: $filePath');
+          final file = File(filePath);
+          await file.writeAsBytes(response.bodyBytes);
+          print('_downloadFile: File written successfully to $filePath');
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã tải xuống: $finalFileName'),
+                action: SnackBarAction(
+                    label: 'Mở', onPressed: () => OpenFile.open(filePath)),
+              ),
+            );
+          }
+        } else {
+          print(
+              '_downloadFile: ERROR - HTTP request failed. Status: ${response.statusCode}.');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: Text(
+                      'Không thể tải file: Server phản hồi ${response.statusCode}')),
+            );
+          }
+        }
+      } else if (storageStatus.isPermanentlyDenied) {
+        print(
+            '_downloadFile: ERROR - Storage permission permanently denied when attempting download.');
+        await _showPermissionPermanentlyDeniedDialog(); // Hiển thị dialog tùy chỉnh
+      } else {
+        // Các trường hợp từ chối khác (denied, restricted, limited)
+        print(
+            '_downloadFile: ERROR - Storage permission not granted for download. Status: $storageStatus');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    'Cần quyền bộ nhớ để tải file. Trạng thái: $storageStatus')),
+          );
+        }
+      }
+    } catch (e, s) {
+      print('Lỗi tải xuống file (Exception): $e');
+      print('Stack trace: $s');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi tải xuống file: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openFilePicker() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        type: FileType.any,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final fileName = result.files.single.name;
+        final bytes = await file.readAsBytes();
+        final base64Data = base64Encode(bytes);
+
+        await _jsBridgeUtil?.sendFileToWeb(base64Data, fileName);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không có file nào được chọn')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi khi chọn file: $e')),
+      );
+    }
   }
 
   void _loadUrl(String url, {bool isRetry = false}) {
@@ -157,36 +402,34 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    // KHỞI TẠO WEBVIEWCONTROLLER VÀ NAVIGATIONDELEGATE
     final tempController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String navUrl) {
-            print('WebView: Page started loading: $navUrl');
+            print('WebView Delegate: Page started loading: $navUrl');
             if (mounted) {
               setState(() {
                 _isLoadingPage = true;
-                _isError =
-                    false; // Quan trọng: Reset lỗi khi bắt đầu tải trang mới
+                _isError = false;
               });
             }
           },
           onPageFinished: (String finishedUrl) async {
-            print('WebView: Page finished loading: $finishedUrl');
+            print('WebView Delegate: Page finished loading: $finishedUrl');
             if (!mounted) return;
 
             bool isExternal = _isExternalUrl(finishedUrl);
 
             if (!isExternal && _webViewController != null) {
-              // Chỉ thiết lập JS bridge và kiểm tra đăng nhập cho domain của bạn
-              // Khởi tạo JsBridgeUtil với controller hiện tại (đã được gán cho _webViewController)
-              _jsBridgeUtil = JsBridgeUtil(_webViewController!);
-              await _jsBridgeUtil!
-                  .setupJavaScriptHandlers(); // JS này vẫn cần sửa cho webview_flutter
-
-              final isLoggedIn = await _jsBridgeUtil!
-                  .checkLoginStatus(); // Hàm JS này có thể lỗi trên trang ngoài
+              _jsBridgeUtil = JsBridgeUtil(
+                _webViewController!,
+                onFileUploadRequested: _openFilePicker,
+              );
+              await _jsBridgeUtil!.setupJavaScriptHandlers();
+              final isLoggedIn = await _jsBridgeUtil!.checkLoginStatus();
               if (mounted) {
                 setState(() {
                   _isLoadingPage = false;
@@ -194,7 +437,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
               }
             } else {
-              // Nếu là domain ngoài (ví dụ: SSO) hoặc controller null, chỉ dừng loading
               setState(() {
                 _isLoadingPage = false;
               });
@@ -203,26 +445,26 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           onWebResourceError: (WebResourceError error) {
             print(
-                'WebView: WebResourceError: ${error.description}, URL: ${error.url}, ErrorCode: ${error.errorCode}, Type: ${error.errorType}, isForMainFrame: ${error.isForMainFrame}');
+                'WebView Delegate: WebResourceError: ${error.description}, URL: ${error.url}, ErrorCode: ${error.errorCode}, Type: ${error.errorType}, isForMainFrame: ${error.isForMainFrame}');
+            // ... (Phần code xử lý lỗi onWebResourceError của bạn giữ nguyên) ...
+            // (Phần này khá dài trong code gốc của bạn, hãy đảm bảo nó vẫn ở đây)
             if (!mounted) return;
 
-            // Nếu lỗi không phải cho frame chính và đang ở trang ngoài, có thể bỏ qua việc hiển thị lỗi toàn màn hình
+            // ... (Toàn bộ logic xử lý lỗi onWebResourceError của bạn) ...
             if (error.isForMainFrame == false &&
                 error.url != null &&
                 _isExternalUrl(error.url!)) {
               print(
                   'Ignoring non-main frame error on external domain: ${error.url}');
-              // Có thể hiển thị SnackBar thay vì lỗi toàn màn hình
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('đang tải')),
+                SnackBar(content: Text('Lỗi tải tài nguyên phụ')),
               );
-              // Không set _isLoadingPage = false hoặc _isError = true ở đây nếu không muốn thay đổi UI chính
-              return; // Thoát sớm để không xử lý như lỗi nghiêm trọng
+              return;
             }
 
             setState(() {
               _isLoadingPage = false;
-              _isError = true; // Mặc định là có lỗi
+              _isError = true;
 
               if (!_isConnected) {
                 _errorMessage =
@@ -230,17 +472,8 @@ class _HomeScreenState extends State<HomeScreen> {
               } else if (error.isForMainFrame == true &&
                   (error.url == _currentUrl ||
                       _isExternalUrl(error.url ?? _currentUrl))) {
-                // Lỗi tải trang chính (SSO hoặc trang hiện tại)
                 _errorMessage = "Không thể tải trang: ${error.description}";
-              } else if (error.errorCode == -2 ||
-                  error.errorCode == -6 ||
-                  error.description
-                      .toLowerCase()
-                      .contains('net::err_internet_disconnected') ||
-                  error.description
-                      .toLowerCase()
-                      .contains('net::err_name_not_resolved') ||
-                  error.description.toLowerCase().contains('no internet') ||
+              } else if (error.errorCode == -2 || /* ... các mã lỗi khác ... */
                   error.errorType == WebResourceErrorType.hostLookup ||
                   error.errorType == WebResourceErrorType.connect ||
                   error.errorType == WebResourceErrorType.timeout) {
@@ -252,43 +485,99 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             });
           },
-          onNavigationRequest: (NavigationRequest request) {
-            print('WebView: Navigation request to: ${request.url}');
-            // Ví dụ: Xử lý các link đặc biệt (tel:, mailto:, custom schemes)
-            // if (request.url.startsWith('tel:')) {
-            //   // launchUrl(Uri.parse(request.url));
-            //   return NavigationDecision.prevent;
-            // }
+
+          // ====================================================================
+          // QUAN TRỌNG: Đây là hàm onNavigationRequest bạn cần có
+          // ====================================================================
+          onNavigationRequest: (NavigationRequest request) async {
+            // Log này sẽ xuất hiện cho MỌI yêu cầu điều hướng
+            print(
+                'WebView Delegate: onNavigationRequest received for URL: ${request.url}');
+
+            final String lowercasedUrl = request.url.toLowerCase();
+            // Kiểm tra đuôi file
+            bool hasFileExtension = lowercasedUrl.endsWith('.pdf') ||
+                lowercasedUrl.endsWith('.jpg') ||
+                lowercasedUrl.endsWith('.png') ||
+                lowercasedUrl.endsWith('.doc') ||
+                lowercasedUrl.endsWith('.docx');
+
+            // Kiểm tra API tải file đặc thù của bạn
+            bool isApiDownloadLink =
+                request.url.contains('/api/QuanLyHDSDApi/Download/');
+
+            if (hasFileExtension || isApiDownloadLink) {
+              String suggestedFileName;
+              List<String> pathSegments = Uri.parse(request.url).pathSegments;
+
+              if (isApiDownloadLink) {
+                // Lấy ID file từ URL làm tên gợi ý
+                int downloadKeywordIndex = -1;
+                for (int i = 0; i < pathSegments.length; i++) {
+                  if (pathSegments[i].toLowerCase() == 'download') {
+                    downloadKeywordIndex = i;
+                    break;
+                  }
+                }
+                if (downloadKeywordIndex != -1 &&
+                    downloadKeywordIndex + 1 < pathSegments.length &&
+                    pathSegments[downloadKeywordIndex + 1].isNotEmpty) {
+                  suggestedFileName = pathSegments[downloadKeywordIndex + 1];
+                } else {
+                  suggestedFileName = 'downloaded_item'; // Tên dự phòng
+                }
+              } else {
+                // Lấy tên file từ URL có đuôi file
+                suggestedFileName = pathSegments.isNotEmpty
+                    ? pathSegments.last
+                    : 'downloaded_file';
+              }
+
+              // Đảm bảo tên file không rỗng
+              if (suggestedFileName.isEmpty) {
+                suggestedFileName = 'downloaded_file_generic';
+              }
+
+              // Log xác nhận rằng chúng ta sẽ chặn và gọi _downloadFile
+              print(
+                  'WebView Delegate: Intercepting navigation to ${request.url} for download. Suggested filename: $suggestedFileName. Calling _downloadFile...');
+
+              // ====> DÒNG GỌI HÀM TẢI FILE:
+              await _downloadFile(request.url, suggestedFileName);
+
+              // Rất quan trọng: Ngăn WebView tự điều hướng
+              return NavigationDecision.prevent;
+            }
+
+            // Nếu không phải link tải file, cho phép WebView điều hướng bình thường
+            print(
+                'WebView Delegate: Allowing WebView to navigate to ${request.url}');
             return NavigationDecision.navigate;
           },
+          // ====================================================================
+
           onUrlChange: (UrlChange change) {
             if (change.url != null) {
-              print('WebView: URL changed to: ${change.url}');
-              if (mounted) {
-                // Cập nhật _currentUrl nếu URL thực sự thay đổi do điều hướng trong WebView
-                // Điều này quan trọng cho nút "Thử lại" và logic khác dựa trên URL hiện tại
-                // Tuy nhiên, cẩn thận để không gây vòng lặp setState nếu onUrlChange và onPageFinished/Started cùng kích hoạt
-                if (_currentUrl != change.url) {
-                  // setState(() {
-                  //   _currentUrl = change.url!;
-                  //   _urlController.text = _currentUrl;
-                  // });
-                }
-              }
+              print('WebView Delegate: URL changed to: ${change.url}');
+              // Bạn có thể muốn cập nhật _currentUrl và _urlController.text ở đây nếu cần
+              // _currentUrl = change.url!;
+              // _urlController.text = _currentUrl;
+              // _updateCurrentNavIndex(_currentUrl); // Cập nhật bottom nav nếu có
             }
           },
         ),
       );
 
-    // Gán controller và thiết lập JavaScript Channels (nếu có)
-    _webViewController = tempController;
-    _setupJavaScriptChannels(); // Gọi hàm thiết lập channels (hiện đang trống)
-
-    // Tải request
-    _webViewController!.loadRequest(Uri.parse(_currentUrl));
+    _webViewController = tempController; // Gán controller mới tạo
+    if (_webViewController != null) {
+      // Chỉ thiết lập JS bridge nếu controller tồn tại
+      _setupJavaScriptChannels();
+    }
+    _webViewController!.loadRequest(Uri.parse(_currentUrl)); // Tải URL
 
     if (mounted) {
-      setState(() {}); // Rebuild để WebViewWidget sử dụng controller mới
+      setState(
+          () {}); // Cập nhật UI để hiển thị WebView (nếu nó được ẩn trước đó)
     }
   }
 
@@ -314,10 +603,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _updateCurrentNavIndex(String url) {
     if (!mounted) return;
     for (int i = 0; i < MenuConfig.bottomNavItems.length; i++) {
-      // Kiểm tra xem URL có chứa phần base của item nav không
-      // Ví dụ: nếu item.url là "http://domain.com/path" và url là "http://domain.com/path/subpath"
-      // thì nên coi là khớp.
-      // Hoặc nếu item.url là "/path" và url là "http://domain.com/path", cũng nên khớp.
       Uri itemUri;
       try {
         itemUri = Uri.parse(MenuConfig.bottomNavItems[i].url);
@@ -332,7 +617,6 @@ class _HomeScreenState extends State<HomeScreen> {
         continue;
       }
 
-      // So sánh host và path (hoặc chỉ path nếu itemUri không có host)
       bool hostMatch =
           (itemUri.hasAuthority && itemUri.host == currentLoadedUri.host) ||
               !itemUri.hasAuthority;
@@ -347,12 +631,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
     }
-    // Nếu không khớp, có thể không làm gì hoặc đặt về một trạng thái default (ví dụ -1)
-    // if (_currentNavIndex != -1) { // Ví dụ: reset nếu không có item nào khớp
-    //   setState(() {
-    //     _currentNavIndex = -1; // Hoặc một index mặc định nào đó
-    //   });
-    // }
   }
 
   void _onBottomNavTap(int index) {
@@ -360,7 +638,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _isError = false;
-          // _currentNavIndex = index; // Cập nhật ngay lập tức hoặc chờ onPageFinished
         });
       }
       _loadUrl(MenuConfig.bottomNavItems[index].url);

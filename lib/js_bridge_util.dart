@@ -1,238 +1,360 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'dart:convert';
 
-/// Tiện ích để quản lý JavaScript Bridge giữa Flutter và WebView
+/// Utility class to manage JavaScript Bridge between Flutter and WebView
 class JsBridgeUtil {
   final WebViewController controller;
+  final VoidCallback? onFileUploadRequested; // Callback for file upload
 
-  JsBridgeUtil(this.controller);
+  JsBridgeUtil(this.controller, {this.onFileUploadRequested});
 
-  /// Thiết lập các JavaScript handlers
+  /// Set up JavaScript handlers and channels
   Future<void> setupJavaScriptHandlers() async {
-    // Đăng ký các handlers từ JavaScript đến Flutter
+    // Register JavaScript channels
+    controller.addJavaScriptChannel(
+      'LoginResultHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          bool success = data['success'] ?? false;
+          String messageText = data['message'] ?? '';
+          print('LoginResultHandler: success=$success, message=$messageText');
+          // Handle login result (e.g., show SnackBar or update UI)
+        } catch (e) {
+          print('Error in LoginResultHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'SessionInfoHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          String token = data['token'] ?? '';
+          String expiry = data['expiry'] ?? '';
+          print('SessionInfoHandler: token=$token, expiry=$expiry');
+        } catch (e) {
+          print('Error in SessionInfoHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'ProfileUpdateResultHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          bool success = data['success'] ?? false;
+          String messageText = data['message'] ?? '';
+          print(
+              'ProfileUpdateResultHandler: success=$success, message=$messageText');
+        } catch (e) {
+          print('Error in ProfileUpdateResultHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'PaymentResultHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          bool success = data['success'] ?? false;
+          String transactionId = data['transactionId'] ?? '';
+          String messageText = data['message'] ?? '';
+          print(
+              'PaymentResultHandler: success=$success, transactionId=$transactionId, message=$messageText');
+        } catch (e) {
+          print('Error in PaymentResultHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'ReceiptInfoHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          String receiptUrl = data['receiptUrl'] ?? '';
+          String receiptId = data['receiptId'] ?? '';
+          print(
+              'ReceiptInfoHandler: receiptUrl=$receiptUrl, receiptId=$receiptId');
+        } catch (e) {
+          print('Error in ReceiptInfoHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'ReviewSubmitResultHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          bool success = data['success'] ?? false;
+          String reviewId = data['reviewId'] ?? '';
+          String messageText = data['message'] ?? '';
+          print(
+              'ReviewSubmitResultHandler: success=$success, reviewId=$reviewId, message=$messageText');
+        } catch (e) {
+          print('Error in ReviewSubmitResultHandler: $e');
+        }
+      },
+    );
+
+    controller.addJavaScriptChannel(
+      'ReportDataHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        try {
+          final data = jsonDecode(message.message);
+          print('ReportDataHandler: reportData=$data');
+        } catch (e) {
+          print('Error in ReportDataHandler: $e');
+        }
+      },
+    );
+
+    // Add FileUploadHandler for file upload requests
+    controller.addJavaScriptChannel(
+      'FileUploadHandler',
+      onMessageReceived: (JavaScriptMessage message) {
+        if (message.message == 'upload' && onFileUploadRequested != null) {
+          onFileUploadRequested!(); // Trigger file picker in HomeScreen
+        }
+      },
+    );
+
+    // Inject base JavaScript after setting up channels
     await _injectBaseJavaScript();
   }
 
-  /// Chèn các hàm JavaScript cơ bản vào WebView
+  /// Inject base JavaScript functions into WebView
   Future<void> _injectBaseJavaScript() async {
     const String baseScript = '''
-    // Hàm tiện ích để gọi từ JavaScript về Flutter
+    // Utility object for JavaScript to Flutter communication
     window.flutterBridge = {
-      // Thông báo kết quả đăng nhập
       notifyLoginResult: function(success, message) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('loginResultHandler', success, message);
+        if (window.LoginResultHandler) {
+          window.LoginResultHandler.postMessage(JSON.stringify({success: success, message: message}));
         } else {
-          console.warn('flutter_inappwebview not available for loginResultHandler');
+          console.warn('LoginResultHandler not available');
         }
       },
-      
-      // Gửi thông tin phiên đăng nhập
       sendSessionInfo: function(token, expiry) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('sessionInfoHandler', token, expiry);
+        if (window.SessionInfoHandler) {
+          window.SessionInfoHandler.postMessage(JSON.stringify({token: token, expiry: expiry}));
         } else {
-          console.warn('flutter_inappwebview not available for sessionInfoHandler');
+          console.warn('SessionInfoHandler not available');
         }
       },
-      
-      // Thông báo kết quả cập nhật thông tin tài khoản
       notifyProfileUpdateResult: function(success, message) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('profileUpdateResultHandler', success, message);
+        if (window.ProfileUpdateResultHandler) {
+          window.ProfileUpdateResultHandler.postMessage(JSON.stringify({success: success, message: message}));
         } else {
-          console.warn('flutter_inappwebview not available for profileUpdateResultHandler');
+          console.warn('ProfileUpdateResultHandler not available');
         }
       },
-      
-      // Thông báo kết quả thanh toán
       notifyPaymentResult: function(success, transactionId, message) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('paymentResultHandler', success, transactionId, message);
+        if (window.PaymentResultHandler) {
+          window.PaymentResultHandler.postMessage(JSON.stringify({success: success, transactionId: transactionId, message: message}));
         } else {
-          console.warn('flutter_inappwebview not available for paymentResultHandler');
+          console.warn('PaymentResultHandler not available');
         }
       },
-      
-      // Gửi thông tin biên lai
       sendReceiptInfo: function(receiptUrl, receiptId) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('receiptInfoHandler', receiptUrl, receiptId);
+        if (window.ReceiptInfoHandler) {
+          window.ReceiptInfoHandler.postMessage(JSON.stringify({receiptUrl: receiptUrl, receiptId: receiptId}));
         } else {
-          console.warn('flutter_inappwebview not available for receiptInfoHandler');
+          console.warn('ReceiptInfoHandler not available');
         }
       },
-      
-      // Thông báo kết quả gửi phiếu nhận xét
       notifyReviewSubmitResult: function(success, reviewId, message) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('reviewSubmitResultHandler', success, reviewId, message);
+        if (window.ReviewSubmitResultHandler) {
+          window.ReviewSubmitResultHandler.postMessage(JSON.stringify({success: success, reviewId: reviewId, message: message}));
         } else {
-          console.warn('flutter_inappwebview not available for reviewSubmitResultHandler');
+          console.warn('ReviewSubmitResultHandler not available');
         }
       },
-      
-      // Gửi dữ liệu báo cáo
       sendReportData: function(reportData) {
-        if (window.flutter_inappwebview) { // Cần sửa cho webview_flutter
-          window.flutter_inappwebview.callHandler('reportDataHandler', reportData);
+        if (window.ReportDataHandler) {
+          window.ReportDataHandler.postMessage(JSON.stringify(reportData));
         } else {
-          console.warn('flutter_inappwebview not available for reportDataHandler');
+          console.warn('ReportDataHandler not available');
+        }
+      },
+      requestFileUpload: function() {
+        if (window.FileUploadHandler) {
+          window.FileUploadHandler.postMessage('upload');
+        } else {
+          console.warn('FileUploadHandler not available');
         }
       }
     };
-    
-    // Hàm kiểm tra trạng thái đăng nhập
+
+    // Check login status
     function checkLoginStatus() {
       try {
-        // Không nên chạy hàm này trên các domain ngoài (như SSO)
-        // Nếu đang ở domain của bạn, bạn có thể thêm các kiểm tra phức tạp hơn
-        // Ví dụ: kiểm tra cookie, localStorage, hoặc một element đặc trưng
-        
-        // Phương pháp 1: Kiểm tra URL - sau khi đăng nhập sẽ chuyển hướng đến trang chủ
-        // Điều này có thể không đáng tin cậy nếu URL trang chủ có thể truy cập mà không cần đăng nhập
         if (window.location.pathname.toLowerCase().includes('/home') || window.location.pathname === '/') {
-           // Thêm kiểm tra khác để chắc chắn đã đăng nhập, ví dụ: sự tồn tại của nút logout
-           const logoutButton = document.querySelector('a[href*="logout"], button[onclick*="logout"]');
-           if (logoutButton) return true;
+          const logoutButton = document.querySelector('a[href*="logout"], button[onclick*="logout"]');
+          if (logoutButton) return true;
         }
-        
-        // Phương pháp 2: Kiểm tra sự hiện diện của thông tin người dùng hoặc liên kết tài khoản
-        // Cần làm cho các selector này mạnh mẽ hơn và tránh lỗi
         let accountElement = document.querySelector('a[href*="Account/Manage"], a[href*="Profile"]');
         if (accountElement) return true;
-
-        // Tìm kiếm text nhạy cảm với trường hợp chữ và tránh lỗi nếu không tìm thấy
-        const userElements = document.querySelectorAll('body *'); // Tìm trong toàn bộ body
+        const userElements = document.querySelectorAll('body *');
         for (let i = 0; i < userElements.length; i++) {
           if (userElements[i] && userElements[i].textContent) {
             const textContent = userElements[i].textContent.trim();
-            // Các từ khóa nhạy cảm cho biết đã đăng nhập
             if (textContent.includes('Thông tin tài khoản') || textContent.includes('Xin chào') || textContent.includes('Đăng xuất')) {
-               // Kiểm tra thêm để đảm bảo đây không phải là link "Đăng nhập"
-               if (userElements[i].tagName !== 'A' || !userElements[i].href || !userElements[i].href.toLowerCase().includes('login')) {
-                 return true;
-               }
+              if (userElements[i].tagName !== 'A' || !userElements[i].href || !userElements[i].href.toLowerCase().includes('login')) {
+                return true;
+              }
             }
           }
         }
-        
-        // Mặc định là chưa đăng nhập nếu không tìm thấy dấu hiệu nào
         return false;
       } catch (e) {
-        console.error('Error in checkLoginStatus:', e.toString());
-        return false; // Trả về false nếu có lỗi
+        console.error('Error in checkLoginStatus:', e);
+        return false;
       }
     }
-    
-    // Hàm tiện ích cho đăng nhập
+
+    // Auto-fill login form
     function autoFillLoginForm(username, password) {
       try {
         let usernameInput = document.querySelector('input[name="username"], input[name="UserName"], input#username, input#UserName');
         let passwordInput = document.querySelector('input[name="password"], input[name="Password"], input#password, input#Password');
-        
-        // Thử các selector phổ biến khác nếu không tìm thấy
         if (!usernameInput) {
           const inputs = document.querySelectorAll('input[type="text"], input[type="email"]');
           for (let i = 0; i < inputs.length; i++) {
-            if (inputs[i].offsetParent !== null) { // Check if visible
+            if (inputs[i].offsetParent !== null) {
               usernameInput = inputs[i];
               break;
             }
           }
         }
         if (!passwordInput) {
-           const passInputs = document.querySelectorAll('input[type="password"]');
-           for (let i = 0; i < passInputs.length; i++) {
+          const passInputs = document.querySelectorAll('input[type="password"]');
+          for (let i = 0; i < passInputs.length; i++) {
             if (passInputs[i].offsetParent !== null) {
               passwordInput = passInputs[i];
               break;
             }
           }
         }
-
         if (usernameInput) usernameInput.value = username;
         if (passwordInput) passwordInput.value = password;
-        
-        return !!(usernameInput && passwordInput); // Trả về true nếu cả hai trường được tìm thấy
+        return !!(usernameInput && passwordInput);
       } catch (e) {
-        console.error('Error in autoFillLoginForm:', e.toString());
+        console.error('Error in autoFillLoginForm:', e);
         return false;
       }
     }
-    
+
+    // Submit login form
     function submitLoginForm() {
       try {
         let submitButton = document.querySelector('button[type="submit"], input[type="submit"]');
         if (!submitButton) {
-            const buttons = document.querySelectorAll('button');
-            for(let i = 0; i < buttons.length; i++) {
-                if (buttons[i].textContent && buttons[i].textContent.toLowerCase().includes('đăng nhập')) {
-                    submitButton = buttons[i];
-                    break;
-                }
+          const buttons = document.querySelectorAll('button');
+          for (let i = 0; i < buttons.length; i++) {
+            if (buttons[i].textContent && buttons[i].textContent.toLowerCase().includes('đăng nhập')) {
+              submitButton = buttons[i];
+              break;
             }
+          }
         }
-        
         if (submitButton) {
           submitButton.click();
           return true;
         }
         return false;
       } catch (e) {
-        console.error('Error in submitLoginForm:', e.toString());
+        console.error('Error in submitLoginForm:', e);
         return false;
       }
     }
-    
+
+    // Initiate VneID login
     function initiateVneIDLogin() {
       try {
         let vneidButton = null;
         const links = document.querySelectorAll('a');
         for (let i = 0; i < links.length; i++) {
-            if (links[i].href && links[i].href.toLowerCase().includes('vneid') || 
-                (links[i].textContent && links[i].textContent.toLowerCase().includes('tài khoản định danh điện tử'))) {
-                vneidButton = links[i];
-                break;
-            }
+          if (links[i].href && links[i].href.toLowerCase().includes('vneid') || 
+              (links[i].textContent && links[i].textContent.toLowerCase().includes('tài khoản định danh điện tử'))) {
+            vneidButton = links[i];
+            break;
+          }
         }
-        
         if (vneidButton) {
           vneidButton.click();
           return true;
         }
         return false;
       } catch (e) {
-        console.error('Error in initiateVneIDLogin:', e.toString());
+        console.error('Error in initiateVneIDLogin:', e);
         return false;
       }
     }
-    
-    // Đăng ký các hàm vào window để có thể gọi từ Flutter
+
+    // Inject file input click handler
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('input[type="file"]').forEach(input => {
+        input.addEventListener('click', () => {
+          window.flutterBridge.requestFileUpload();
+        });
+      });
+    });
+
+    // Handle file selection from Flutter
+    window.onFileSelected = function(base64Data, fileName) {
+      try {
+        const byteString = atob(base64Data);
+        const byteArray = new Uint8Array(byteString.length);
+        for (let i = 0; i < byteString.length; i++) {
+          byteArray[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([byteArray]);
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) {
+          const file = new File([blob], fileName);
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          fileInput.files = dataTransfer.files;
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } catch (e) {
+        console.error('Error in onFileSelected:', e);
+      }
+    };
+
+    // Register functions to window
     window.autoFillLoginForm = autoFillLoginForm;
     window.submitLoginForm = submitLoginForm;
     window.checkLoginStatus = checkLoginStatus;
     window.initiateVneIDLogin = initiateVneIDLogin;
-    
+
     console.log('JavaScript Bridge (base functions) has been initialized');
     ''';
 
-    await controller.runJavaScript(baseScript);
+    try {
+      await controller.runJavaScript(baseScript);
+    } catch (e) {
+      print('Error injecting base JavaScript: $e');
+    }
   }
 
-  /// Chèn các hàm JavaScript cho chức năng nộp đảng phí
+  /// Inject JavaScript for party fee functions
   Future<void> injectPartyFeeJavaScript() async {
     const String partyFeeScript = '''
-    // Lấy danh sách đảng phí cần nộp
     function getPartyFeeList() {
       try {
         const feeItems = [];
-        // LƯU Ý: Các selector '.party-fee-item', '.fee-name' v.v. cần khớp với cấu trúc HTML thực tế của trang web
-        const feeElements = document.querySelectorAll('.party-fee-item'); // Ví dụ selector
+        const feeElements = document.querySelectorAll('.party-fee-item');
         feeElements.forEach(el => {
           feeItems.push({
-            id: el.getAttribute('data-id'), // Ví dụ lấy id
+            id: el.getAttribute('data-id'),
             name: el.querySelector('.fee-name')?.textContent.trim(),
             amount: el.querySelector('.fee-amount')?.textContent.trim(),
             dueDate: el.querySelector('.fee-due-date')?.textContent.trim(),
@@ -241,18 +363,16 @@ class JsBridgeUtil {
         });
         return JSON.stringify(feeItems);
       } catch (e) {
-        console.error('Error in getPartyFeeList:', e.toString());
-        return '[]'; // Trả về mảng rỗng dạng chuỗi nếu lỗi
+        console.error('Error in getPartyFeeList:', e);
+        return '[]';
       }
     }
-    
-    // Chọn đảng phí để thanh toán
+
     function selectPartyFee(feeId) {
       try {
-        // LƯU Ý: Selector cần khớp với HTML
         const feeElement = document.querySelector(`.party-fee-item[data-id="\${feeId}"]`);
         if (feeElement) {
-          const selectButton = feeElement.querySelector('.select-button'); // Ví dụ
+          const selectButton = feeElement.querySelector('.select-button');
           if (selectButton) {
             selectButton.click();
             return true;
@@ -260,64 +380,61 @@ class JsBridgeUtil {
         }
         return false;
       } catch (e) {
-        console.error('Error in selectPartyFee:', e.toString());
+        console.error('Error in selectPartyFee:', e);
         return false;
       }
     }
-    
-    // Điền thông tin thanh toán
+
     function fillPaymentInfo(paymentInfoJson) {
       try {
         const paymentInfo = JSON.parse(paymentInfoJson);
-        // LƯU Ý: Selector cần khớp với HTML của form thanh toán
         Object.keys(paymentInfo).forEach(key => {
-          const el = document.querySelector(`#payment-form [name="\${key}"]`); // Ví dụ
+          const el = document.querySelector(`#payment-form [name="\${key}"]`);
           if (el) el.value = paymentInfo[key];
         });
         return true;
       } catch (e) {
-        console.error('Error in fillPaymentInfo:', e.toString());
+        console.error('Error in fillPaymentInfo:', e);
         return false;
       }
     }
-    
-    // Xác nhận thanh toán
+
     function confirmPayment() {
       try {
-        // LƯU Ý: Selector cần khớp với HTML
-        const confirmButton = document.querySelector('#payment-form button[type="submit"]'); // Ví dụ
+        const confirmButton = document.querySelector('#payment-form button[type="submit"]');
         if (confirmButton) {
           confirmButton.click();
           return true;
         }
         return false;
       } catch (e) {
-        console.error('Error in confirmPayment:', e.toString());
+        console.error('Error in confirmPayment:', e);
         return false;
       }
     }
-    
-    // Đăng ký các hàm vào window để có thể gọi từ Flutter
+
     window.getPartyFeeList = getPartyFeeList;
     window.selectPartyFee = selectPartyFee;
     window.fillPaymentInfo = fillPaymentInfo;
     window.confirmPayment = confirmPayment;
-    
+
     console.log('Party Fee JavaScript functions have been initialized');
     ''';
 
-    await controller.runJavaScript(partyFeeScript);
+    try {
+      await controller.runJavaScript(partyFeeScript);
+    } catch (e) {
+      print('Error injecting party fee JavaScript: $e');
+    }
   }
 
-  /// Chèn các hàm JavaScript cho chức năng lập phiếu nhận xét
+  /// Inject JavaScript for review functions
   Future<void> injectReviewJavaScript() async {
     const String reviewScript = '''
-    // Lấy danh sách phiếu nhận xét
     function getReviewList() {
       try {
         const reviews = [];
-        // LƯU Ý: Các selector cần khớp với HTML thực tế
-        const reviewElements = document.querySelectorAll('.review-item'); // Ví dụ
+        const reviewElements = document.querySelectorAll('.review-item');
         reviewElements.forEach(el => {
           reviews.push({
             id: el.getAttribute('data-id'),
@@ -328,37 +445,33 @@ class JsBridgeUtil {
         });
         return JSON.stringify(reviews);
       } catch (e) {
-        console.error('Error in getReviewList:', e.toString());
+        console.error('Error in getReviewList:', e);
         return '[]';
       }
     }
-    
-    // Tạo phiếu nhận xét mới
+
     function createNewReview() {
       try {
-        // LƯU Ý: Selector cần khớp với HTML
-        const createButton = document.querySelector('.create-review-button'); // Ví dụ
+        const createButton = document.querySelector('.create-review-button');
         if (createButton) {
           createButton.click();
           return true;
         }
         return false;
       } catch (e) {
-        console.error('Error in createNewReview:', e.toString());
+        console.error('Error in createNewReview:', e);
         return false;
       }
     }
-    
-    // Điền thông tin phiếu nhận xét
+
     function fillReviewForm(reviewDataJson) {
       try {
         const reviewData = JSON.parse(reviewDataJson);
-        // LƯU Ý: Selector cần khớp với HTML của form
         Object.keys(reviewData).forEach(key => {
-          const el = document.querySelector(`#review-form [name="\${key}"]`); // Ví dụ
+          const el = document.querySelector(`#review-form [name="\${key}"]`);
           if (el) {
             if (el.tagName === 'TEXTAREA') {
-              el.textContent = reviewData[key]; // Hoặc el.value tùy thuộc vào cách trang web xử lý textarea
+              el.textContent = reviewData[key];
             } else {
               el.value = reviewData[key];
             }
@@ -366,199 +479,198 @@ class JsBridgeUtil {
         });
         return true;
       } catch (e) {
-        console.error('Error in fillReviewForm:', e.toString());
+        console.error('Error in fillReviewForm:', e);
         return false;
       }
     }
-    
-    // Gửi phiếu nhận xét
+
     function submitReviewForm() {
       try {
-        // LƯU Ý: Selector cần khớp với HTML
-        const submitButton = document.querySelector('#review-form button[type="submit"]'); // Ví dụ
+        const submitButton = document.querySelector('#review-form button[type="submit"]');
         if (submitButton) {
           submitButton.click();
           return true;
         }
         return false;
       } catch (e) {
-        console.error('Error in submitReviewForm:', e.toString());
+        console.error('Error in submitReviewForm:', e);
         return false;
       }
     }
-    
-    // Đăng ký các hàm vào window để có thể gọi từ Flutter
+
     window.getReviewList = getReviewList;
     window.createNewReview = createNewReview;
     window.fillReviewForm = fillReviewForm;
     window.submitReviewForm = submitReviewForm;
-    
+
     console.log('Review JavaScript functions have been initialized');
     ''';
 
-    await controller.runJavaScript(reviewScript);
+    try {
+      await controller.runJavaScript(reviewScript);
+    } catch (e) {
+      print('Error injecting review JavaScript: $e');
+    }
   }
 
-  /// Gọi hàm JavaScript để tự động điền thông tin đăng nhập
+  /// Send file data to WebView
+  Future<void> sendFileToWeb(String base64Data, String fileName) async {
+    try {
+      String jsCode = '''
+        window.onFileSelected("$base64Data", "$fileName");
+      ''';
+      await controller.runJavaScript(jsCode);
+    } catch (e) {
+      print('Error sending file to web: $e');
+    }
+  }
+
+  /// Auto-fill login form
   Future<bool> autoFillLogin(String username, String password) async {
     try {
       final result = await controller.runJavaScriptReturningResult(
           'autoFillLoginForm("$username", "$password")');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling autoFillLoginForm: $e');
+      print('Error calling autoFillLoginForm: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để gửi form đăng nhập
+  /// Submit login form
   Future<bool> submitLogin() async {
     try {
       final result =
           await controller.runJavaScriptReturningResult('submitLoginForm()');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling submitLoginForm: $e');
+      print('Error calling submitLoginForm: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để kiểm tra trạng thái đăng nhập
+  /// Check login status
   Future<bool> checkLoginStatus() async {
-    // Chỉ nên gọi hàm này trên domain của bạn, không phải trang SSO
-    // Thêm kiểm tra domain ở đây hoặc ở HomeScreen trước khi gọi
     try {
       final result =
           await controller.runJavaScriptReturningResult('checkLoginStatus()');
-      print('Dart: checkLoginStatus JS result: $result');
+      print('checkLoginStatus JS result: $result');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling checkLoginStatus: $e');
+      print('Error calling checkLoginStatus: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để bắt đầu đăng nhập qua VneID
+  /// Initiate VneID login
   Future<bool> initiateVneIDLogin() async {
     try {
       final result =
           await controller.runJavaScriptReturningResult('initiateVneIDLogin()');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling initiateVneIDLogin: $e');
+      print('Error calling initiateVneIDLogin: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để lấy danh sách đảng phí
+  /// Get party fee list
   Future<String> getPartyFeeList() async {
     try {
-      await injectPartyFeeJavaScript(); // Đảm bảo inject script trước khi gọi
+      await injectPartyFeeJavaScript();
       final result =
           await controller.runJavaScriptReturningResult('getPartyFeeList()');
-      // Chuyển đổi từ Object (trên iOS) hoặc String (trên Android) về String
       return result is String ? result : result.toString();
     } catch (e) {
-      print('Dart: Error calling getPartyFeeList: $e');
+      print('Error calling getPartyFeeList: $e');
       return '[]';
     }
   }
 
-  /// Gọi hàm JavaScript để chọn đảng phí thanh toán
+  /// Select party fee
   Future<bool> selectPartyFee(String feeId) async {
     try {
       final result = await controller
           .runJavaScriptReturningResult('selectPartyFee("$feeId")');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling selectPartyFee: $e');
+      print('Error calling selectPartyFee: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để điền thông tin thanh toán
+  /// Fill payment info
   Future<bool> fillPaymentInfo(Map<String, dynamic> paymentInfo) async {
     try {
-      // JSON encoding an toàn hơn
       final paymentInfoJson = json.encode(paymentInfo);
       final result = await controller.runJavaScriptReturningResult(
           'fillPaymentInfo(\'$paymentInfoJson\')');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling fillPaymentInfo: $e');
+      print('Error calling fillPaymentInfo: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để xác nhận thanh toán
+  /// Confirm payment
   Future<bool> confirmPayment() async {
     try {
       final result =
           await controller.runJavaScriptReturningResult('confirmPayment()');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling confirmPayment: $e');
+      print('Error calling confirmPayment: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để lấy danh sách phiếu nhận xét
+  /// Get review list
   Future<String> getReviewList() async {
     try {
-      await injectReviewJavaScript(); // Đảm bảo inject script trước khi gọi
+      await injectReviewJavaScript();
       final result =
           await controller.runJavaScriptReturningResult('getReviewList()');
       return result is String ? result : result.toString();
     } catch (e) {
-      print('Dart: Error calling getReviewList: $e');
+      print('Error calling getReviewList: $e');
       return '[]';
     }
   }
 
-  /// Gọi hàm JavaScript để tạo phiếu nhận xét mới
+  /// Create new review
   Future<bool> createNewReview() async {
     try {
       final result =
           await controller.runJavaScriptReturningResult('createNewReview()');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling createNewReview: $e');
+      print('Error calling createNewReview: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để điền thông tin phiếu nhận xét
+  /// Fill review form
   Future<bool> fillReviewForm(Map<String, dynamic> reviewData) async {
     try {
-      final reviewDataJson = json.encode(reviewData); // Sử dụng json.encode
+      final reviewDataJson = json.encode(reviewData);
       final result = await controller
           .runJavaScriptReturningResult('fillReviewForm(\'$reviewDataJson\')');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling fillReviewForm: $e');
+      print('Error calling fillReviewForm: $e');
       return false;
     }
   }
 
-  /// Gọi hàm JavaScript để gửi phiếu nhận xét
+  /// Submit review form
   Future<bool> submitReviewForm() async {
     try {
       final result =
           await controller.runJavaScriptReturningResult('submitReviewForm()');
       return result.toString() == 'true';
     } catch (e) {
-      print('Dart: Error calling submitReviewForm: $e');
+      print('Error calling submitReviewForm: $e');
       return false;
     }
   }
-
-  // Hàm _mapToJsonString không còn cần thiết nếu dùng json.encode
-  // String _mapToJsonString(Map<String, dynamic> map) {
-  //   return map
-  //       .toString()
-  //       .replaceAll('{', '{')
-  //       .replaceAll('}', '}')
-  //       .replaceAll(', ', ',')
-  //       .replaceAll(': ', ':');
-  // }
 }
