@@ -137,34 +137,64 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    print("HomeScreen: Requesting initial permissions in initState...");
-    if (Platform.isAndroid || Platform.isIOS) {
-      // Chỉ yêu cầu quyền storage nếu nó là cốt lõi cho chức năng tải file
-      PermissionStatus storageStatus = await Permission.storage.request();
+    print("HomeScreen: Requesting initial permissions...");
+    if (Platform.isAndroid) {
+      Map<Permission, PermissionStatus> statuses = await [
+        // Permission.storage là quan trọng cho việc đọc file để upload trên các phiên bản Android cũ hơn
+        // và cũng có thể bao gồm các quyền media trên Android 13+ nếu Manifest được cấu hình đúng.
+        Permission.storage,
+        // Nếu bạn thường xuyên cho người dùng chọn ảnh/video, yêu cầu rõ ràng sẽ tốt hơn:
+        Permission
+            .photos, // Cho phép truy cập thư viện ảnh (cần cho Android 13+)
+        // Permission.videos, // Nếu cần chọn video (cần cho Android 13+)
+        // Permission.audio,  // Nếu cần chọn audio (cần cho Android 13+)
+      ].request();
 
-      print(
-          "HomeScreen: Permission.storage Status in initState: ${storageStatus.toString()}");
+      statuses.forEach((permission, status) {
+        print(
+            "HomeScreen: Permission: ${permission.toString()} Status: ${status.toString()}");
+      });
 
+      // Kiểm tra quyền storage vì nó là cơ bản nhất cho việc đọc file
+      PermissionStatus? storageStatus = statuses[Permission.storage];
       if (storageStatus == PermissionStatus.permanentlyDenied) {
         print(
-            "HomeScreen: Storage permission is permanently denied (checked in initState).");
-        await _showPermissionPermanentlyDeniedDialog(); // Hiển thị dialog tùy chỉnh
+            "HomeScreen: Storage (or related media) permission is permanently denied.");
+        // Hiển thị dialog hướng dẫn người dùng vào cài đặt
+        // _showPermissionPermanentlyDeniedDialog() của bạn nên giải thích chung về quyền truy cập file/media
+        await _showPermissionPermanentlyDeniedDialog();
       } else if (storageStatus == PermissionStatus.denied) {
         print(
-            "HomeScreen: Storage permission was denied in initState (not permanently).");
-        // Bạn có thể hiển thị SnackBar thông báo ngắn gọn ở đây nếu muốn
-        // if (mounted) {
-        //   ScaffoldMessenger.of(context).showSnackBar(
-        //     const SnackBar(content: Text('Quyền truy cập bộ nhớ bị từ chối.')),
-        //   );
-        // }
+            "HomeScreen: Storage (or related media) permission was denied (not permanently).");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Quyền truy cập bộ nhớ/media bị từ chối. Chức năng tải lên file có thể không hoạt động.')),
+          );
+        }
       } else if (storageStatus == PermissionStatus.granted) {
-        print(
-            "HomeScreen: Storage permission granted successfully in initState.");
+        print("HomeScreen: Storage (or relevant media) permission granted.");
       }
-      // Không cần xử lý Permission.photos ở đây nữa nếu chỉ tập trung vào tải file
-    } else {
-      print("HomeScreen: Permissions not requested (not Android or iOS).");
+    } else if (Platform.isIOS) {
+      // Trên iOS, FilePicker thường không cần quyền 'storage' chung.
+      // Permission.photos là để truy cập thư viện ảnh.
+      Map<Permission, PermissionStatus> statuses =
+          await [Permission.photos].request();
+      statuses.forEach((permission, status) {
+        print(
+            "HomeScreen: Permission: ${permission.toString()} Status: ${status.toString()}");
+      });
+      if (statuses[Permission.photos] == PermissionStatus.permanentlyDenied) {
+        await _showPermissionPermanentlyDeniedDialog(); // Dialog này nên có nội dung phù hợp cho iOS
+      } else if (statuses[Permission.photos] == PermissionStatus.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Quyền truy cập thư viện ảnh bị từ chối.')),
+          );
+        }
+      }
     }
   }
 
@@ -354,28 +384,122 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openFilePicker() async {
+    print('_openFilePicker: Received request to open file picker.');
     try {
+      bool permissionsGranted = false;
+      if (Platform.isAndroid) {
+        PermissionStatus storageStatus = await Permission.storage.status;
+        if (!storageStatus.isGranted) {
+          print(
+              '_openFilePicker: Storage permission was ${storageStatus.name}. Requesting again...');
+          storageStatus = await Permission.storage.request();
+        }
+        if (storageStatus.isGranted) {
+          permissionsGranted = true;
+        } else {
+          print(
+              '_openFilePicker: Storage permission denied after explicit request. Status: ${storageStatus.name}');
+          if (storageStatus.isPermanentlyDenied && mounted) {
+            await _showPermissionPermanentlyDeniedDialog();
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content:
+                      Text('Không có quyền truy cập bộ nhớ để chọn file.')),
+            );
+          }
+        }
+      } else if (Platform.isIOS) {
+        // Đối với iOS, FilePicker thường không yêu cầu quyền storage chung cho các file từ 'Files' app.
+        // Nếu chọn từ thư viện ảnh, Permission.photos cần được cấp.
+        // Giả sử webview của bạn có cơ chế yêu cầu JS riêng cho ảnh từ thư viện nếu cần.
+        // Hoặc FileType.any trên iOS sẽ cho phép chọn từ nhiều nguồn.
+        // Quyền photos nên được kiểm tra nếu loại file là hình ảnh/video.
+        // Ví dụ: nếu type là FileType.image hoặc FileType.media
+        // PermissionStatus photoStatus = await Permission.photos.status;
+        // if (!photoStatus.isGranted) { /* request or show dialog */ } else { permissionsGranted = true; }
+        permissionsGranted =
+            true; // Mặc định cho phép tiếp tục trên iOS, dựa vào FilePicker tự xử lý.
+      } else {
+        permissionsGranted = true; // Cho các nền tảng khác nếu có
+      }
+
+      if (!permissionsGranted) {
+        print('_openFilePicker: Permissions not adequate to proceed.');
+        return;
+      }
+
+      print(
+          '_openFilePicker: Permissions appear adequate. Launching FilePicker...');
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.any,
+        allowMultiple: false, // Giữ nguyên theo code gốc
+        type: FileType.any, // Giữ nguyên theo code gốc
+        // Cân nhắc: Nếu chỉ cần loại file cụ thể, hãy chỉ định (ví dụ: FileType.image)
+        // Điều này có thể cải thiện trải nghiệm người dùng và đơn giản hóa quyền.
       );
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
         final fileName = result.files.single.name;
+        print('_openFilePicker: File selected: $fileName, Path: ${file.path}');
+
+        if (!await file.exists()) {
+          print(
+              '_openFilePicker: ERROR - Selected file does not exist at path: ${file.path}');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text(
+                      'Lỗi: File đã chọn không tồn tại hoặc không thể truy cập.')),
+            );
+          }
+          return;
+        }
+
+        print('_openFilePicker: Reading file as bytes...');
         final bytes = await file.readAsBytes();
+        print('_openFilePicker: Encoding file to base64...');
         final base64Data = base64Encode(bytes);
+        print(
+            '_openFilePicker: File ready, ${bytes.lengthInBytes} bytes. Sending to web via JsBridgeUtil...');
 
         await _jsBridgeUtil?.sendFileToWeb(base64Data, fileName);
+        print('_openFilePicker: Attempted to send file to web.');
+        // Không có cách nào để biết chắc chắn file đã được xử lý thành công phía web từ đây
+        // trừ khi web có cơ chế phản hồi lại qua JavaScriptChannel.
+        if (mounted) {
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   SnackBar(content: Text('Đã gửi file "$fileName" lên web để xử lý.')),
+          // );
+        }
       } else {
+        print('_openFilePicker: No file selected or result/path was null.');
+        if (mounted) {
+          // Chỉ hiển thị SnackBar nếu người dùng đã hủy picker, không phải lỗi khác
+          if (result == null) {
+            // Người dùng đã hủy
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   const SnackBar(content: Text('Không có file nào được chọn.')),
+            // );
+            print('_openFilePicker: User cancelled file picking.');
+          } else {
+            // result != null nhưng path = null (ít xảy ra với pickFiles().single)
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Lỗi khi lấy thông tin file đã chọn.')),
+            );
+          }
+        }
+      }
+    } catch (e, stacktrace) {
+      print('_openFilePicker: An error occurred: $e');
+      print('_openFilePicker: Stacktrace: $stacktrace');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không có file nào được chọn')),
+          SnackBar(
+              content: Text('Đã xảy ra lỗi khi chọn file: ${e.toString()}')),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi chọn file: $e')),
-      );
     }
   }
 
@@ -754,16 +878,81 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dịch vụ công Thành ủy Hà Nội'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context)
+            .colorScheme
+            .primary, // Thường là màu chủ đạo, trang trọng
+
+        foregroundColor: Theme.of(context)
+            .colorScheme
+            .onPrimary, // Nếu backgroundColor là primary
+
+        // 3. Tiêu đề:
+        title: const Text(
+          'Dịch vụ công Thành ủy Hà Nội',
+          style: TextStyle(
+            fontWeight: FontWeight
+                .w600, // Tăng độ đậm cho tiêu đề thêm phần trang trọng
+            fontSize: 18, // Điều chỉnh kích thước nếu cần, 18-20 là phổ biến
+            // letterSpacing: 0.5, // Giãn nhẹ khoảng cách chữ nếu muốn
+          ),
+        ),
+
+        // 4. Căn giữa tiêu đề (Tùy chọn - tạo cảm giác cân đối, trang trọng):
+        centerTitle: true, // Đặt thành true nếu bạn muốn tiêu đề ở giữa
+        // Nếu bạn có Drawer, tiêu đề lệch trái (mặc định) cũng rất phổ biến và chuyên nghiệp.
+
+        // 5. Icon Drawer (Leading):
+        // Nếu Scaffold có drawer, icon menu sẽ tự động xuất hiện.
+        // Bạn có thể tùy chỉnh nếu muốn, ví dụ thêm padding cho icon drawer:
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            tooltip: 'Mở menu',
+          ),
+        ),
+        // Hoặc nếu muốn thêm logo nhỏ (cân nhắc kỹ để không làm rối AppBar):
+        // leadingWidth: 100, // Tăng không gian cho leading nếu cần
+        // leading: Padding(
+        //   padding: const EdgeInsets.all(7.0),
+        //   child: Image.asset(
+        //     'assets/your_official_logo.png', // Đường dẫn tới logo của bạn
+        //     fit: BoxFit.contain,
+        //   ),
+        // ),
+
+        // 6. Actions (Các nút hành động bên phải):
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip:
+                'Tải lại trang', // Thêm tooltip để rõ ràng hơn về chức năng
             onPressed: (_isLoadingPage || (!_isConnected && _isError))
-                ? null
+                ? null // Giữ nguyên logic vô hiệu hóa nút
                 : _retryLoading,
           ),
+          // Ví dụ thêm nút thông báo, nếu có:
+          // IconButton(
+          //   icon: const Icon(Icons.notifications_outlined), // Sử dụng icon outlined cho vẻ hiện đại
+          //   tooltip: 'Thông báo',
+          //   onPressed: () {
+          //     // Xử lý khi nhấn vào thông báo
+          //   },
+          // ),
+          const SizedBox(width: 8), // Thêm một chút khoảng cách ở cuối nếu cần
         ],
+
+        // 7. Độ nổi (Elevation - điều khiển bóng đổ):
+        elevation:
+            1.5, // Giảm một chút so với mặc định (4.0) có thể làm AppBar trông gọn gàng, hiện đại hơn.
+        // Đặt là 0.0 nếu muốn phẳng hoàn toàn.
+        // Hoặc có thể thêm một đường viền dưới thay vì đổ bóng:
+        shape: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1.0,
+          ),
+        ),
       ),
       drawer: AppDrawer(
         onNavigate: _onNavigate,
