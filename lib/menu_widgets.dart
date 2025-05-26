@@ -7,7 +7,7 @@ class MenuConfig {
 
   // Các URL chính
   static const String homeUrl = '$baseUrl/Home';
-  static const String aboutUrl = '$baseUrl/About';
+  static const String aboutUrl = '$baseUrl/#';
   static const String administrativeUrl =
       'https://dichvucong.gov.vn/p/home/dvc-thanh-toan-truc-tuyen.html';
   static const String profileUrl =
