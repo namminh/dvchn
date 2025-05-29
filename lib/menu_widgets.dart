@@ -179,154 +179,237 @@ class MenuItem {
   });
 }
 
-/// Widget hiển thị Drawer Menu
 class AppDrawer extends StatelessWidget {
   final Function(String) onNavigate;
   final bool isLoggedIn;
   final VoidCallback onLoginRequired;
+  final String? currentUrl; // Thêm biến này để biết URL nào đang được hiển thị
 
   const AppDrawer({
     Key? key,
     required this.onNavigate,
     required this.isLoggedIn,
     required this.onLoginRequired,
+    this.currentUrl, // Khởi tạo
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      child: Column(
         children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          _buildDrawerHeader(context, theme, colorScheme),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
               children: [
-                const Text(
-                  'Hệ thống dịch vụ công',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                ...MenuConfig.mainMenuItems
+                    .map((item) =>
+                        _buildMenuItem(context, item, theme, colorScheme))
+                    .toList(),
+                const Divider(
+                    height: 1,
+                    thickness: 0.5), // Phân cách trước mục đăng nhập/đăng xuất
+                if (!isLoggedIn)
+                  ListTile(
+                    leading: Icon(Icons.login, color: colorScheme.primary),
+                    title: Text('Đăng nhập',
+                        style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600)),
+                    onTap: () {
+                      Navigator.pop(context); // Đóng drawer
+                      onNavigate(MenuConfig.loginUrl);
+                    },
+                  )
+                else
+                  ListTile(
+                    leading: Icon(Icons.logout, color: colorScheme.error),
+                    title: Text('Đăng xuất',
+                        style: TextStyle(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.w600)),
+                    onTap: () {
+                      Navigator.pop(context); // Đóng drawer
+                      // TODO: Thêm logic đăng xuất ở đây
+                      // Ví dụ: onNavigate(MenuConfig.logoutUrl); // Nếu có URL đăng xuất
+                      // Hoặc gọi một hàm onLogout()
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text('Chức năng đăng xuất cần được cài đặt!')),
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Thành ủy Hà Nội',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isLoggedIn ? 'DVCHN' : 'Chưa đăng nhập',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
-          ...MenuConfig.mainMenuItems
-              .map((item) => _buildMenuItem(context, item))
-              .toList(),
-          if (!isLoggedIn)
-            ListTile(
-              leading: const Icon(Icons.login),
-              title: const Text('Đăng nhập'),
-              onTap: () {
-                Navigator.pop(context); // Đóng drawer
-                onNavigate(MenuConfig.loginUrl);
-              },
-            ),
+          // Optional: Footer cho drawer
+          // Container(
+          //   padding: const EdgeInsets.all(16.0),
+          //   child: Text(
+          //     'Phiên bản 1.0.0',
+          //     style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+          //     textAlign: TextAlign.center,
+          //   ),
+          // )
         ],
       ),
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, MenuItem item) {
-    // Nếu menu yêu cầu đăng nhập và người dùng chưa đăng nhập
+  Widget _buildDrawerHeader(
+      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+    return UserAccountsDrawerHeader(
+      accountName: const Text(
+        'Hệ thống dịch vụ công',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: Colors.white, // Đảm bảo màu chữ dễ đọc trên nền header
+        ),
+      ),
+      accountEmail: const Text(
+        'Thành ủy Hà Nội',
+        style: TextStyle(
+          fontSize: 14,
+          color: Colors.white70, // Màu chữ hơi mờ hơn
+        ),
+      ),
+      currentAccountPicture: CircleAvatar(
+        backgroundColor: colorScheme.onPrimary, // Màu nền cho avatar
+        child: Icon(
+          Icons.cloud_queue, // Icon ví dụ, bạn có thể thay đổi
+          size: 48,
+          color: colorScheme.primary,
+        ),
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary,
+            colorScheme.primaryContainer.withOpacity(0.8)
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      otherAccountsPictures: [
+        if (isLoggedIn)
+          CircleAvatar(
+            backgroundColor: colorScheme.secondary,
+            child:
+                const Icon(Icons.verified_user, color: Colors.white, size: 20),
+          )
+        else
+          CircleAvatar(
+            backgroundColor: Colors.grey.shade400,
+            child: const Icon(Icons.person_off, color: Colors.white, size: 20),
+          )
+      ],
+    );
+  }
+
+  Widget _buildMenuItem(BuildContext context, MenuItem item, ThemeData theme,
+      ColorScheme colorScheme) {
     final bool isDisabled = item.requiresLogin && !isLoggedIn;
+    final bool isSelected = currentUrl == item.url &&
+        !isDisabled; // Kiểm tra xem item có đang được chọn không
+
+    Color? tileColor =
+        isSelected ? colorScheme.primary.withOpacity(0.12) : null;
+    Color? iconColor = isDisabled
+        ? Colors.grey[500]
+        : (isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant);
+    Color? textColor = isDisabled
+        ? Colors.grey[600]
+        : (isSelected ? colorScheme.primary : colorScheme.onSurface);
+    FontWeight? textWeight = isSelected ? FontWeight.bold : FontWeight.normal;
 
     if (item.subMenuItems != null && item.subMenuItems!.isNotEmpty) {
+      // Kiểm tra xem có submenu item nào đang được chọn không
+      bool isSubMenuSelected = item.subMenuItems!.any((subItem) =>
+          currentUrl == subItem.url && !(subItem.requiresLogin && !isLoggedIn));
+
       return ExpansionTile(
-        leading: Icon(
-          item.icon,
-          color: isDisabled ? Colors.grey : null,
-        ),
+        leading: Icon(item.icon, color: iconColor),
+        backgroundColor: tileColor, // Màu nền khi mở rộng
+        collapsedBackgroundColor: tileColor, // Màu nền khi đóng
+        initiallyExpanded:
+            isSubMenuSelected, // Mở rộng nếu có submenu item được chọn
         title: Text(
           item.title,
-          style: TextStyle(
-            color: isDisabled ? Colors.grey : null,
-          ),
+          style: TextStyle(color: textColor, fontWeight: textWeight),
         ),
         children: item.subMenuItems!.map((subItem) {
           final bool isSubItemDisabled = subItem.requiresLogin && !isLoggedIn;
+          final bool isSubItemSelected =
+              currentUrl == subItem.url && !isSubItemDisabled;
+
+          Color? subTileColor =
+              isSubItemSelected ? colorScheme.secondary.withOpacity(0.1) : null;
+          Color? subIconColor = isSubItemDisabled
+              ? Colors.grey[500]
+              : (isSubItemSelected
+                  ? colorScheme.secondary
+                  : colorScheme.onSurfaceVariant);
+          Color? subTextColor = isSubItemDisabled
+              ? Colors.grey[600]
+              : (isSubItemSelected
+                  ? colorScheme.secondary
+                  : colorScheme.onSurface);
+          FontWeight? subTextWeight =
+              isSubItemSelected ? FontWeight.bold : FontWeight.normal;
 
           return ListTile(
-            leading: Icon(
-              subItem.icon,
-              color: isSubItemDisabled ? Colors.grey : null,
-            ),
+            contentPadding: const EdgeInsets.only(
+                left: 40.0, right: 16.0), // Thụt lề cho submenu
+            tileColor: subTileColor,
+            leading: Icon(subItem.icon, color: subIconColor, size: 22),
             title: Text(
               subItem.title,
               style: TextStyle(
-                color: isSubItemDisabled ? Colors.grey : null,
-              ),
+                  color: subTextColor, fontWeight: subTextWeight, fontSize: 15),
             ),
             onTap: () {
               Navigator.pop(context); // Đóng drawer
-
               if (isSubItemDisabled) {
                 onLoginRequired();
               } else {
                 onNavigate(subItem.url);
               }
             },
+            selected: isSubItemSelected,
+            selectedTileColor: colorScheme.secondary.withOpacity(0.15),
           );
         }).toList(),
       );
     } else {
       return ListTile(
-        leading: Icon(
-          item.icon,
-          color: isDisabled ? Colors.grey : null,
-        ),
+        tileColor: tileColor,
+        leading: Icon(item.icon, color: iconColor),
         title: Text(
           item.title,
-          style: TextStyle(
-            color: isDisabled ? Colors.grey : null,
-          ),
+          style: TextStyle(color: textColor, fontWeight: textWeight),
         ),
         onTap: () {
           Navigator.pop(context); // Đóng drawer
-
           if (isDisabled) {
             onLoginRequired();
           } else {
             onNavigate(item.url);
           }
         },
+        selected: isSelected,
+        selectedTileColor: colorScheme.primary.withOpacity(0.15),
       );
     }
   }
 }
 
-/// Widget hiển thị Bottom Navigation Bar
 class AppBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -343,110 +426,72 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colorScheme = theme.colorScheme;
+
+    // Kiểu chữ cho label được chọn và không được chọn
+    final TextStyle selectedLabelStyle = TextStyle(
+      fontSize: 12.5, // Kích thước chữ có thể điều chỉnh
+      fontWeight: FontWeight.w600, // Đậm hơn một chút khi được chọn
+      color: colorScheme
+          .primary, // Màu này cũng sẽ được áp dụng bởi selectedItemColor
+    );
+
+    final TextStyle unselectedLabelStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.normal,
+      color: colorScheme.onSurface.withOpacity(
+          0.75), // Màu này cũng sẽ được áp dụng bởi unselectedItemColor
+    );
+
     return BottomNavigationBar(
       currentIndex: currentIndex,
       onTap: (index) {
         final item = MenuConfig.bottomNavItems[index];
-
         if (item.requiresLogin && !isLoggedIn) {
-          onLoginRequired();
+          onLoginRequired(); // Gọi callback yêu cầu đăng nhập
         } else {
-          onTap(index);
+          onTap(index); // Gọi callback khi item được chọn
         }
       },
-      type: BottomNavigationBarType.fixed,
+      // ----- Thuộc tính cải thiện giao diện -----
+      type: BottomNavigationBarType
+          .fixed, // 'fixed' tốt cho 3-5 items, các label luôn hiển thị
+      backgroundColor: theme.bottomAppBarTheme.color ??
+          colorScheme.surface, // Màu nền từ theme, hoặc surface color
+      selectedItemColor:
+          colorScheme.primary, // Màu cho icon và label của item được chọn
+      unselectedItemColor: colorScheme.onSurface
+          .withOpacity(0.75), // Màu cho icon và label của item không được chọn
+
+      selectedLabelStyle: selectedLabelStyle,
+      unselectedLabelStyle: unselectedLabelStyle,
+
+      showUnselectedLabels:
+          true, // Luôn hiển thị label của các item không được chọn
+      elevation: theme.bottomAppBarTheme.elevation ??
+          8.0, // Độ nổi (shadow) từ theme, hoặc giá trị mặc định
+
       items: MenuConfig.bottomNavItems.map((item) {
-        final bool isDisabled = item.requiresLogin && !isLoggedIn;
+        final bool isDisabledByLogin = item.requiresLogin && !isLoggedIn;
+
+        // Xác định màu sắc cho icon dựa trên trạng thái isDisabledByLogin
+        // Nếu không bị vô hiệu hóa bởi login, BottomNavigationBar sẽ tự quản lý màu selected/unselected
+        Color? iconColorOverride =
+            isDisabledByLogin ? Colors.grey.shade500 : null;
 
         return BottomNavigationBarItem(
           icon: Icon(
             item.icon,
-            color: isDisabled ? Colors.grey : null,
+            color: iconColorOverride, // Áp dụng màu xám nếu bị vô hiệu hóa
+          ),
+          // activeIcon cho phép bạn chỉ định một widget khác (hoặc Icon khác) khi item được chọn.
+          // Ở đây, chúng ta dùng cùng Icon nhưng nó sẽ tự động nhận màu từ selectedItemColor.
+          activeIcon: Icon(
+            item.icon,
+            // color: colorScheme.primary, // Không thực sự cần thiết vì selectedItemColor đã được đặt ở BottomNavigationBar
           ),
           label: item.title,
-        );
-      }).toList(),
-    );
-  }
-}
-
-/// Widget hiển thị các chức năng chính ở trang chủ
-class MainFeatureGrid extends StatelessWidget {
-  final Function(String) onNavigate;
-  final bool isLoggedIn;
-  final VoidCallback onLoginRequired;
-
-  const MainFeatureGrid({
-    Key? key,
-    required this.onNavigate,
-    required this.isLoggedIn,
-    required this.onLoginRequired,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      children: MenuConfig.mainFeatures.map((feature) {
-        final bool isDisabled = feature.requiresLogin && !isLoggedIn;
-
-        return Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: InkWell(
-            onTap: () {
-              if (isDisabled) {
-                onLoginRequired();
-              } else {
-                onNavigate(feature.url);
-              }
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  feature.icon,
-                  size: 48,
-                  color:
-                      isDisabled ? Colors.grey : Theme.of(context).primaryColor,
-                ),
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    feature.title,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDisabled ? Colors.grey : null,
-                    ),
-                  ),
-                ),
-                if (isDisabled)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      '(Yêu cầu đăng nhập)',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
         );
       }).toList(),
     );

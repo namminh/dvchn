@@ -38,7 +38,6 @@ dependencies:
   webview_flutter: 
   connectivity_plus: 
   webview_flutter_android: 
-  webview_flutter_wkwebview:
   file_picker: 
   url_launcher: 
   permission_handler: 
@@ -47,6 +46,8 @@ dependencies:
   open_file:
   http:
   internet_connection_checker:
+  flutter_local_notifications:
+  image_picker:
 dev_dependencies:
   flutter_test:
     sdk: flutter
