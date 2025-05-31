@@ -57,7 +57,7 @@ class _FilePickerParamsParseResult {
   _FilePickerParamsParseResult(this.fileType, this.allowedExtensions);
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _urlController = TextEditingController();
   WebViewController? _webViewController;
 
@@ -294,15 +294,14 @@ class _HomeScreenState extends State<HomeScreen> {
             final lowercasedUrl = request.url.toLowerCase();
             bool hasFileExtension =
                 fileExtensions.any((ext) => lowercasedUrl.endsWith(ext));
-            bool isApiDownloadLink =
-                request.url.contains('/api/QuanLyHDSDApi/Download/');
+            bool isApiDownloadLink = request.url.contains('File');
 
             if (hasFileExtension || isApiDownloadLink) {
               String suggestedFileName;
               List<String> pathSegments = Uri.parse(request.url).pathSegments;
               if (isApiDownloadLink) {
-                int downloadKeywordIndex = pathSegments
-                    .indexWhere((s) => s.toLowerCase() == 'download');
+                int downloadKeywordIndex =
+                    pathSegments.indexWhere((s) => s.toLowerCase() == 'File');
                 suggestedFileName = downloadKeywordIndex != -1 &&
                         downloadKeywordIndex + 1 < pathSegments.length &&
                         pathSegments[downloadKeywordIndex + 1].isNotEmpty
@@ -1068,35 +1067,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // **[MODIFIED]** Using AnimatedSize for smoother transitions
+    // [MODIFIED] Sử dụng AnimatedSize để ẩn/hiện AppBar và BottomNavigationBar mượt mà.
     return Scaffold(
-      appBar: _showBars
-          ? AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              title: const Text('Dịch vụ công Thành ủy Hà Nội',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
-              centerTitle: true,
-              leading: Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Mở menu',
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Tải lại trang',
-                  onPressed: (_isLoadingPage || (!_isConnected && _isError))
-                      ? null
-                      : _retryLoading,
-                ),
-                const SizedBox(width: 8),
-              ],
-              elevation: 1.5,
-            )
-          : null,
+      // [MODIFIED] AppBar được chuyển vào trong body để có thể co giãn.
+      // appBar: _showBars ? AppBar(...) : null, // Dòng này bị loại bỏ
       drawer: AppDrawer(
         onNavigate: _onNavigate,
         isLoggedIn: _isLoggedIn,
@@ -1104,6 +1078,53 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          // [MODIFIED] Thêm AnimatedSize để gói AppBar.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: _showBars
+                ? AppBar(
+                    backgroundColor: Color(0xfffbfbfb),
+                    toolbarHeight: 42,
+                    shadowColor: Colors.black,
+                    title: const Text(''),
+                    flexibleSpace: Stack(
+                      children: [
+                        Center(
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                height: 24,
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 0),
+                                child: Ink.image(
+                                  height: 36,
+                                  fit: BoxFit.contain,
+                                  image: const AssetImage('assets/logoDVC.png'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Tải lại trang',
+                        onPressed:
+                            (_isLoadingPage || (!_isConnected && _isError))
+                                ? null
+                                : _retryLoading,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    elevation: 1.5,
+                  )
+                : const SizedBox(width: double.infinity, height: 0),
+          ),
           Expanded(
             child: Stack(
               alignment: Alignment.center,
@@ -1117,8 +1138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         CircularProgressIndicator(),
                         SizedBox(height: 20),
-                        Text("Đang tải trang...",
-                            style: TextStyle(fontSize: 16)),
+                        Text("Đang tải ...", style: TextStyle(fontSize: 16)),
                       ],
                     ),
                   ),
@@ -1178,14 +1198,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _showBars
-          ? AppBottomNavBar(
-              currentIndex: _currentNavIndex,
-              onTap: _onBottomNavTap,
-              isLoggedIn: _isLoggedIn,
-              onLoginRequired: _onLoginRequired,
-            )
-          : null,
+      // [MODIFIED] Thêm AnimatedSize để gói BottomNavigationBar.
+      bottomNavigationBar: AnimatedSize(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        child: _showBars
+            ? AppBottomNavBar(
+                currentIndex: _currentNavIndex,
+                onTap: _onBottomNavTap,
+                isLoggedIn: _isLoggedIn,
+                onLoginRequired: _onLoginRequired,
+              )
+            : const SizedBox(width: double.infinity, height: 0),
+      ),
     );
   }
 }
