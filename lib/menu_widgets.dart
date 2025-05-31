@@ -1,165 +1,47 @@
+// lib/menu_widgets.dart
+
 import 'package:flutter/material.dart';
 
-/// Lớp chứa thông tin về các menu và URL tương ứng
-class MenuConfig {
+// lib/config.dart
+
+class AppConfig {
   // URL cơ sở của website
   static const String baseUrl = 'http://113.160.48.99:8791';
 
-  // Các URL chính
+  // --- Các URL chính của ứng dụng ---
   static const String homeUrl = '$baseUrl/Home';
-  static const String aboutUrl = '$baseUrl/#';
-  static const String administrativeUrl =
-      'https://dichvucong.gov.vn/p/home/dvc-thanh-toan-truc-tuyen.html';
-  static const String profileUrl =
-      'http://113.160.48.99:8791/KhayHoSoDang/Index';
-  static const String guideUrl =
-      'http://113.160.48.99:8791/HuongDanSuDung/Index';
+  static const String loginUrl = '$baseUrl/Account/Login?mobile=1';
+  static const String accountInfoUrl =
+      '$baseUrl/Account/ThayDoiThongTinTaiKhoan';
+  static const String authenticationUrl = '$baseUrl/Account/Authentication';
+
+  // --- Các URL cho chức năng nghiệp vụ ---
+  static const String profileUrl = '$baseUrl/KhayHoSoDang/Index';
+  static const String guideUrl = '$baseUrl/HuongDanSuDung/Index';
   static const String feedbackUrl = '$baseUrl/Feedback';
-  static const String accountUrl = '$baseUrl/Account/login';
-  static const String loginUrl = '$baseUrl/Account/Login';
+  static const String feedbackRequestUrl = '$baseUrl/FeedbackRequest';
 
-  // URL của submenu Thủ tục hành chính
-  static const String partyFeeUrl =
+  // --- Các URL cho chức năng Nộp Đảng phí ---
+  static const String partyFeeIndexUrl = '$baseUrl/NopDangPhi/Index';
+  static const String selfCreatePartyFeeUrl = '$baseUrl/NopDangPhi/SelfCreate';
+  static const String cellCreatePartyFeeUrl =
+      '$baseUrl/NopDangPhi/NopChiBoCreate';
+
+  // --- Các URL liên kết ngoài (Dịch vụ công & VNeID) ---
+  static const String aboutUrl = '#'; // Giữ chỗ cho trang giới thiệu
+  static const String vneIdLoginUrl =
+      'https://xacthuc.dichvucong.gov.vn/oauth2/authorize?response_type=code&client_id=ifI4Sqjt9R2Q2n0iZZapnCV4ASca&redirect_uri=https://dvc.hanoi.dcs.vn/SsoAuthenticate/LoginSSODVCQG&scope=openid&acr_values=LoA1';
+
+  // URL cho các thủ tục hành chính trên DVC Quốc gia
+  static const String thunop =
       'https://dichvucong.gov.vn/p/home/dvc-thanh-toan-truc-tuyen.html';
+
+  static const String administrativeProceduresUrl =
+      '$baseUrl/ChuyenSinhHoatDangChinhThuc/Detail';
+  static const String partyFeePaymentUrl =
+      '$baseUrl/ChuyenSinhHoatDangTamThoi/Detail';
   static const String partyActivityConfirmationUrl =
-      'https://dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-nganh-doc.html?ma_thu_tuc=2.002753';
-  static const String officialPartyTransferUrl =
-      'https://dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-nganh-doc.html?ma_thu_tuc=2.002768';
-  static const String temporaryPartyTransferUrl =
-      'https://dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-nganh-doc.html?ma_thu_tuc=2.002769';
-// Danh sách các menu chính
-  static List<MenuItem> mainMenuItems = [
-    MenuItem(
-      title: 'Trang chủ',
-      url: homeUrl,
-      icon: Icons.home,
-      requiresLogin: false,
-    ),
-    MenuItem(
-      title: 'Giới thiệu',
-      url: aboutUrl,
-      icon: Icons.info,
-      requiresLogin: false,
-    ),
-    MenuItem(
-      title: 'Thủ tục hành chính',
-      url: administrativeUrl,
-      icon: Icons.description,
-      requiresLogin: true,
-      subMenuItems: [
-        MenuItem(
-          title: 'Thu nộp Đảng phí',
-          url: partyFeeUrl,
-          icon: Icons.payment,
-          requiresLogin: true,
-        ),
-        MenuItem(
-          title: 'Xác nhận sinh hoạt Đảng hai chiều',
-          url: partyActivityConfirmationUrl,
-          icon: Icons.verified_user,
-          requiresLogin: true,
-        ),
-        MenuItem(
-          title: 'Chuyển sinh hoạt Đảng chính thức',
-          url: officialPartyTransferUrl,
-          icon: Icons.transfer_within_a_station,
-          requiresLogin: true,
-        ),
-        MenuItem(
-          title: 'Chuyển sinh hoạt Đảng tạm thời',
-          url: temporaryPartyTransferUrl,
-          icon: Icons.swap_horiz,
-          requiresLogin: true,
-        ),
-      ],
-    ),
-    MenuItem(
-      title: 'Hồ sơ',
-      url: profileUrl,
-      icon: Icons.folder,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Hướng dẫn',
-      url: guideUrl,
-      icon: Icons.help,
-      requiresLogin: false,
-    ),
-    MenuItem(
-      title: 'Đánh giá mức độ hài lòng',
-      url: feedbackUrl,
-      icon: Icons.star,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Thông tin tài khoản',
-      url: accountUrl,
-      icon: Icons.account_circle,
-      requiresLogin: true,
-    ),
-  ];
-
-  // Danh sách các menu cho Bottom Navigation Bar
-  static List<MenuItem> bottomNavItems = [
-    MenuItem(
-      title: 'Trang chủ',
-      url: homeUrl,
-      icon: Icons.home,
-      requiresLogin: false,
-    ),
-    MenuItem(
-      title: 'Thủ tục',
-      url: administrativeUrl,
-      icon: Icons.description,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Hồ sơ',
-      url: profileUrl,
-      icon: Icons.folder,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Hướng dẫn',
-      url: guideUrl,
-      icon: Icons.help,
-      requiresLogin: false,
-    ),
-    MenuItem(
-      title: 'Tài khoản',
-      url: accountUrl,
-      icon: Icons.account_circle,
-      requiresLogin: true,
-    ),
-  ];
-
-  // Danh sách các chức năng chính hiển thị ở trang chủ
-  static List<MenuItem> mainFeatures = [
-    MenuItem(
-      title: 'Thu nộp đảng phí',
-      url: partyFeeUrl,
-      icon: Icons.payment,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Lấy ý kiến nhận xét',
-      url: '$baseUrl/FeedbackRequest',
-      icon: Icons.feedback,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Chuyển sinh hoạt đảng chính thức',
-      url: officialPartyTransferUrl,
-      icon: Icons.transfer_within_a_station,
-      requiresLogin: true,
-    ),
-    MenuItem(
-      title: 'Chuyển sinh hoạt đảng tạm thời',
-      url: temporaryPartyTransferUrl,
-      icon: Icons.swap_horiz,
-      requiresLogin: true,
-    ),
-  ];
+      '$baseUrl/ChuyenSinhHoatDangChinhThucNoiBo/Detail';
 }
 
 /// Lớp đại diện cho một mục menu
@@ -174,23 +56,129 @@ class MenuItem {
     required this.title,
     required this.url,
     required this.icon,
-    required this.requiresLogin,
+    this.requiresLogin = false,
     this.subMenuItems,
   });
 }
+
+/// Lớp chứa dữ liệu cho các menu, sử dụng AppConfig
+class MenuData {
+  // Danh sách các menu chính cho AppDrawer
+  static List<MenuItem> mainMenuItems = [
+    MenuItem(
+      title: 'Trang chủ',
+      url: AppConfig.homeUrl,
+      icon: Icons.home,
+    ),
+    MenuItem(
+      title: 'Giới thiệu',
+      url: AppConfig.aboutUrl,
+      icon: Icons.info,
+    ),
+    MenuItem(
+      title: 'Thủ tục hành chính',
+      url: AppConfig.thunop,
+      icon: Icons.description,
+      requiresLogin: true,
+      subMenuItems: [
+        MenuItem(
+          title: 'Thu nộp Đảng phí',
+          url: AppConfig.partyFeePaymentUrl,
+          icon: Icons.payment,
+          requiresLogin: true,
+        ),
+        MenuItem(
+          title: 'Chuyển sinh hoạt Đảng chính thức',
+          url: AppConfig.administrativeProceduresUrl,
+          icon: Icons.verified_user,
+          requiresLogin: true,
+        ),
+        MenuItem(
+          title: 'Chuyển sinh hoạt Đảng tạm thời',
+          url: AppConfig.partyFeePaymentUrl,
+          icon: Icons.transfer_within_a_station,
+          requiresLogin: true,
+        ),
+        MenuItem(
+          title: 'Chuyển sinh hoạt Đảng tạm thời',
+          url: AppConfig.partyActivityConfirmationUrl,
+          icon: Icons.swap_horiz,
+          requiresLogin: true,
+        ),
+      ],
+    ),
+    MenuItem(
+      title: 'Hồ sơ',
+      url: AppConfig.profileUrl,
+      icon: Icons.folder,
+      requiresLogin: true,
+    ),
+    MenuItem(
+      title: 'Hướng dẫn',
+      url: AppConfig.guideUrl,
+      icon: Icons.help,
+    ),
+    MenuItem(
+      title: 'Đánh giá mức độ hài lòng',
+      url: AppConfig.feedbackUrl,
+      icon: Icons.star,
+      requiresLogin: true,
+    ),
+    MenuItem(
+      title: 'Thông tin tài khoản',
+      url: AppConfig.accountInfoUrl,
+      icon: Icons.account_circle,
+      requiresLogin: true,
+    ),
+  ];
+
+  // Danh sách các menu cho Bottom Navigation Bar
+  static List<MenuItem> bottomNavItems = [
+    MenuItem(
+      title: 'Trang chủ',
+      url: AppConfig.homeUrl,
+      icon: Icons.home,
+    ),
+    MenuItem(
+      title: 'Thủ tục',
+      url: AppConfig.thunop,
+      icon: Icons.description,
+      requiresLogin: true,
+    ),
+    MenuItem(
+      title: 'Hồ sơ',
+      url: AppConfig.profileUrl,
+      icon: Icons.folder,
+      requiresLogin: true,
+    ),
+    MenuItem(
+      title: 'Xác nhận sinh hoạt Đảng hai chiều',
+      url: AppConfig.administrativeProceduresUrl,
+      icon: Icons.verified_user,
+    ),
+    MenuItem(
+      title: 'Chuyển sinh hoạt Đảng chính thức',
+      url: AppConfig.partyFeePaymentUrl,
+      icon: Icons.transfer_within_a_station,
+      requiresLogin: true,
+    ),
+  ];
+}
+
+// --- CÁC WIDGET GIAO DIỆN (Không thay đổi) ---
 
 class AppDrawer extends StatelessWidget {
   final Function(String) onNavigate;
   final bool isLoggedIn;
   final VoidCallback onLoginRequired;
-  final String? currentUrl; // Thêm biến này để biết URL nào đang được hiển thị
+  final String? currentUrl;
 
   const AppDrawer({
     Key? key,
     required this.onNavigate,
     required this.isLoggedIn,
     required this.onLoginRequired,
-    this.currentUrl, // Khởi tạo
+    this.currentUrl,
   }) : super(key: key);
 
   @override
@@ -206,13 +194,11 @@ class AppDrawer extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                ...MenuConfig.mainMenuItems
+                ...MenuData.mainMenuItems
                     .map((item) =>
                         _buildMenuItem(context, item, theme, colorScheme))
                     .toList(),
-                const Divider(
-                    height: 1,
-                    thickness: 0.5), // Phân cách trước mục đăng nhập/đăng xuất
+                const Divider(height: 1, thickness: 0.5),
                 if (!isLoggedIn)
                   ListTile(
                     leading: Icon(Icons.login, color: colorScheme.primary),
@@ -221,8 +207,8 @@ class AppDrawer extends StatelessWidget {
                             color: colorScheme.primary,
                             fontWeight: FontWeight.w600)),
                     onTap: () {
-                      Navigator.pop(context); // Đóng drawer
-                      onNavigate(MenuConfig.loginUrl);
+                      Navigator.pop(context);
+                      onNavigate(AppConfig.loginUrl);
                     },
                   )
                 else
@@ -233,10 +219,7 @@ class AppDrawer extends StatelessWidget {
                             color: colorScheme.error,
                             fontWeight: FontWeight.w600)),
                     onTap: () {
-                      Navigator.pop(context); // Đóng drawer
-                      // TODO: Thêm logic đăng xuất ở đây
-                      // Ví dụ: onNavigate(MenuConfig.logoutUrl); // Nếu có URL đăng xuất
-                      // Hoặc gọi một hàm onLogout()
+                      Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                             content:
@@ -247,15 +230,6 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          // Optional: Footer cho drawer
-          // Container(
-          //   padding: const EdgeInsets.all(16.0),
-          //   child: Text(
-          //     'Phiên bản 1.0.0',
-          //     style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-          //     textAlign: TextAlign.center,
-          //   ),
-          // )
         ],
       ),
     );
@@ -269,20 +243,20 @@ class AppDrawer extends StatelessWidget {
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 18,
-          color: Colors.white, // Đảm bảo màu chữ dễ đọc trên nền header
+          color: Colors.white,
         ),
       ),
       accountEmail: const Text(
         'Thành ủy Hà Nội',
         style: TextStyle(
           fontSize: 14,
-          color: Colors.white70, // Màu chữ hơi mờ hơn
+          color: Colors.white70,
         ),
       ),
       currentAccountPicture: CircleAvatar(
-        backgroundColor: colorScheme.onPrimary, // Màu nền cho avatar
+        backgroundColor: colorScheme.onPrimary,
         child: Icon(
-          Icons.cloud_queue, // Icon ví dụ, bạn có thể thay đổi
+          Icons.cloud_queue,
           size: 48,
           color: colorScheme.primary,
         ),
@@ -316,8 +290,7 @@ class AppDrawer extends StatelessWidget {
   Widget _buildMenuItem(BuildContext context, MenuItem item, ThemeData theme,
       ColorScheme colorScheme) {
     final bool isDisabled = item.requiresLogin && !isLoggedIn;
-    final bool isSelected = currentUrl == item.url &&
-        !isDisabled; // Kiểm tra xem item có đang được chọn không
+    final bool isSelected = currentUrl == item.url && !isDisabled;
 
     Color? tileColor =
         isSelected ? colorScheme.primary.withOpacity(0.12) : null;
@@ -330,16 +303,14 @@ class AppDrawer extends StatelessWidget {
     FontWeight? textWeight = isSelected ? FontWeight.bold : FontWeight.normal;
 
     if (item.subMenuItems != null && item.subMenuItems!.isNotEmpty) {
-      // Kiểm tra xem có submenu item nào đang được chọn không
       bool isSubMenuSelected = item.subMenuItems!.any((subItem) =>
           currentUrl == subItem.url && !(subItem.requiresLogin && !isLoggedIn));
 
       return ExpansionTile(
         leading: Icon(item.icon, color: iconColor),
-        backgroundColor: tileColor, // Màu nền khi mở rộng
-        collapsedBackgroundColor: tileColor, // Màu nền khi đóng
-        initiallyExpanded:
-            isSubMenuSelected, // Mở rộng nếu có submenu item được chọn
+        backgroundColor: tileColor,
+        collapsedBackgroundColor: tileColor,
+        initiallyExpanded: isSubMenuSelected,
         title: Text(
           item.title,
           style: TextStyle(color: textColor, fontWeight: textWeight),
@@ -365,8 +336,7 @@ class AppDrawer extends StatelessWidget {
               isSubItemSelected ? FontWeight.bold : FontWeight.normal;
 
           return ListTile(
-            contentPadding: const EdgeInsets.only(
-                left: 40.0, right: 16.0), // Thụt lề cho submenu
+            contentPadding: const EdgeInsets.only(left: 40.0, right: 16.0),
             tileColor: subTileColor,
             leading: Icon(subItem.icon, color: subIconColor, size: 22),
             title: Text(
@@ -375,7 +345,7 @@ class AppDrawer extends StatelessWidget {
                   color: subTextColor, fontWeight: subTextWeight, fontSize: 15),
             ),
             onTap: () {
-              Navigator.pop(context); // Đóng drawer
+              Navigator.pop(context);
               if (isSubItemDisabled) {
                 onLoginRequired();
               } else {
@@ -396,7 +366,7 @@ class AppDrawer extends StatelessWidget {
           style: TextStyle(color: textColor, fontWeight: textWeight),
         ),
         onTap: () {
-          Navigator.pop(context); // Đóng drawer
+          Navigator.pop(context);
           if (isDisabled) {
             onLoginRequired();
           } else {
@@ -429,68 +399,47 @@ class AppBottomNavBar extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
-    // Kiểu chữ cho label được chọn và không được chọn
     final TextStyle selectedLabelStyle = TextStyle(
-      fontSize: 12.5, // Kích thước chữ có thể điều chỉnh
-      fontWeight: FontWeight.w600, // Đậm hơn một chút khi được chọn
-      color: colorScheme
-          .primary, // Màu này cũng sẽ được áp dụng bởi selectedItemColor
+      fontSize: 12.5,
+      fontWeight: FontWeight.w600,
+      color: colorScheme.primary,
     );
 
     final TextStyle unselectedLabelStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.normal,
-      color: colorScheme.onSurface.withOpacity(
-          0.75), // Màu này cũng sẽ được áp dụng bởi unselectedItemColor
+      color: colorScheme.onSurface.withOpacity(0.75),
     );
 
     return BottomNavigationBar(
       currentIndex: currentIndex,
       onTap: (index) {
-        final item = MenuConfig.bottomNavItems[index];
+        final item = MenuData.bottomNavItems[index];
         if (item.requiresLogin && !isLoggedIn) {
-          onLoginRequired(); // Gọi callback yêu cầu đăng nhập
+          onLoginRequired();
         } else {
-          onTap(index); // Gọi callback khi item được chọn
+          onTap(index);
         }
       },
-      // ----- Thuộc tính cải thiện giao diện -----
-      type: BottomNavigationBarType
-          .fixed, // 'fixed' tốt cho 3-5 items, các label luôn hiển thị
-      backgroundColor: theme.bottomAppBarTheme.color ??
-          colorScheme.surface, // Màu nền từ theme, hoặc surface color
-      selectedItemColor:
-          colorScheme.primary, // Màu cho icon và label của item được chọn
-      unselectedItemColor: colorScheme.onSurface
-          .withOpacity(0.75), // Màu cho icon và label của item không được chọn
-
+      type: BottomNavigationBarType.fixed,
+      backgroundColor: theme.bottomAppBarTheme.color ?? colorScheme.surface,
+      selectedItemColor: colorScheme.primary,
+      unselectedItemColor: colorScheme.onSurface.withOpacity(0.75),
       selectedLabelStyle: selectedLabelStyle,
       unselectedLabelStyle: unselectedLabelStyle,
-
-      showUnselectedLabels:
-          true, // Luôn hiển thị label của các item không được chọn
-      elevation: theme.bottomAppBarTheme.elevation ??
-          8.0, // Độ nổi (shadow) từ theme, hoặc giá trị mặc định
-
-      items: MenuConfig.bottomNavItems.map((item) {
+      showUnselectedLabels: true,
+      elevation: theme.bottomAppBarTheme.elevation ?? 8.0,
+      items: MenuData.bottomNavItems.map((item) {
         final bool isDisabledByLogin = item.requiresLogin && !isLoggedIn;
-
-        // Xác định màu sắc cho icon dựa trên trạng thái isDisabledByLogin
-        // Nếu không bị vô hiệu hóa bởi login, BottomNavigationBar sẽ tự quản lý màu selected/unselected
         Color? iconColorOverride =
             isDisabledByLogin ? Colors.grey.shade500 : null;
 
         return BottomNavigationBarItem(
           icon: Icon(
             item.icon,
-            color: iconColorOverride, // Áp dụng màu xám nếu bị vô hiệu hóa
+            color: iconColorOverride,
           ),
-          // activeIcon cho phép bạn chỉ định một widget khác (hoặc Icon khác) khi item được chọn.
-          // Ở đây, chúng ta dùng cùng Icon nhưng nó sẽ tự động nhận màu từ selectedItemColor.
-          activeIcon: Icon(
-            item.icon,
-            // color: colorScheme.primary, // Không thực sự cần thiết vì selectedItemColor đã được đặt ở BottomNavigationBar
-          ),
+          activeIcon: Icon(item.icon),
           label: item.title,
         );
       }).toList(),
